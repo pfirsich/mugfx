@@ -327,11 +327,12 @@ typedef enum {
 typedef struct {
     mugfx_buffer_target target; // default: ARRAY
     mugfx_buffer_usage_hint usage; // default: STATIC
-    mugfx_slice data; // optional initial data
+    mugfx_slice data; // optional initial data, length must be set
 } mugfx_buffer_create_params;
 
 mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params);
-void mugfx_buffer_set_data(mugfx_buffer_id buf, mugfx_slice data);
+// You can pass NULL for data to orphan a buffer (offset and data.length will be ignored).
+void mugfx_buffer_update(mugfx_buffer_id buf, size_t offset, mugfx_slice data);
 void mugfx_buffer_destroy(mugfx_buffer_id buf);
 
 // Uniform Data

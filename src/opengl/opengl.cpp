@@ -1230,7 +1230,7 @@ EXPORT mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params)
     return { key };
 }
 
-EXPORT void mugfx_buffer_set_data(mugfx_buffer_id buffer, mugfx_slice data)
+EXPORT void mugfx_buffer_update(mugfx_buffer_id buffer, size_t offset, mugfx_slice data)
 {
     const auto buf = get_pool<Buffer>().get(buffer.id);
     if (!buf) {
@@ -1238,20 +1238,22 @@ EXPORT void mugfx_buffer_set_data(mugfx_buffer_id buffer, mugfx_slice data)
         return;
     }
 
-    if (data.length > buf->size) {
-        // This is possible to do in OpenGL (just use glBufferData instead), but not with other
-        // backends so we error out here too.
-        log_error("Trying to set buffer data with length (%lu) greater than buffer size (%lu)",
-            data.length, buf->size);
-        return;
-    }
-
     if (!bind_buffer(buf->target, buf->buffer)) {
         return;
     }
-    glBufferSubData(buf->target, 0, data.length, data.data);
-    if (const auto error = glGetError()) {
-        log_error("Error in glBufferSubData: %s", gl_error_string(error));
+
+    if (!data.data) {
+        // Orphan buffer
+        glBufferData(buf->target, buf->size, nullptr, buf->usage);
+        if (const auto error = glGetError()) {
+            log_error("Error in glBufferData: %s", gl_error_string(error));
+        }
+    } else {
+        const auto length = std::min(offset + data.length, buf->size) - offset;
+        glBufferSubData(buf->target, offset, length, data.data);
+        if (const auto error = glGetError()) {
+            log_error("Error in glBufferSubData: %s", gl_error_string(error));
+        }
     }
 }
 
