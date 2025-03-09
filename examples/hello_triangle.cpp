@@ -58,6 +58,7 @@ int main()
     mugfx_init({
         .logging_callback = logger,
         .panic_handler = panic_handler,
+        .debug = true,
     });
 
     const mugfx_uniform_descriptor vs_uniforms {

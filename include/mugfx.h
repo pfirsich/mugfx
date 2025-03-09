@@ -62,6 +62,7 @@ typedef struct {
     const void* device; // VkDevice
     const void* swapchain; // VkSwapchainKHR
 #endif
+    bool debug; // do error checking and panic if something is wrong
 } mugfx_init_params;
 
 void mugfx_init(mugfx_init_params params);
