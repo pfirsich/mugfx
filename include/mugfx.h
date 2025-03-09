@@ -465,6 +465,7 @@ typedef struct {
         struct {
             uint32_t binding;
             mugfx_buffer_id id;
+            mugfx_range range;
         } buffer;
 
         struct {

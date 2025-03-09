@@ -228,6 +228,20 @@ static bool bind_buffer(GLenum target, GLuint buffer)
     return true;
 }
 
+static bool bind_buffer(GLenum target, GLuint buffer, uint32_t binding, mugfx_range range)
+{
+    if (range.length) {
+        glBindBufferBase(target, binding, buffer);
+    } else {
+        glBindBufferRange(target, binding, buffer, range.offset, range.length);
+    }
+    if (const auto error = glGetError()) {
+        log_error("Error in glBindBufferBase/Range: %s", gl_error_string(error));
+        return false;
+    }
+    return true;
+}
+
 static std::optional<GLenum> gl_depth_func(mugfx_depth_func func)
 {
     switch (func) {
@@ -1846,6 +1860,16 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
                 return;
             }
             if (!bind_texture(bindings[i].texture.binding, tex->target, tex->texture)) {
+                return;
+            }
+        } else if (bindings[i].type == MUGFX_BINDING_TYPE_BUFFER) {
+            const auto buffer = get_pool<Buffer>().get(bindings[i].buffer.id.id);
+            if (!buffer) {
+                log_error("Buffer ID %u does not exist", bindings[i].buffer.id.id);
+                return;
+            }
+            if (!bind_buffer(buffer->target, buffer->buffer, bindings[i].uniform_data.binding,
+                    bindings[i].buffer.range)) {
                 return;
             }
         }
