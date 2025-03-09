@@ -7,8 +7,7 @@
 
 #include "../shared.hpp"
 
-namespace {
-const char* gl_error_string(GLenum error)
+static const char* gl_error_string(GLenum error)
 {
     switch (error) {
     case GL_NO_ERROR:
@@ -32,7 +31,7 @@ const char* gl_error_string(GLenum error)
     }
 }
 
-std::optional<GLenum> gl_shader_type(mugfx_shader_stage stage)
+static std::optional<GLenum> gl_shader_type(mugfx_shader_stage stage)
 {
     switch (stage) {
     case MUGFX_SHADER_STAGE_VERTEX:
@@ -44,7 +43,7 @@ std::optional<GLenum> gl_shader_type(mugfx_shader_stage stage)
     }
 }
 
-std::optional<GLenum> gl_pixel_format(mugfx_pixel_format format)
+static std::optional<GLenum> gl_pixel_format(mugfx_pixel_format format)
 {
     switch (format) {
     case MUGFX_PIXEL_FORMAT_RGB8:
@@ -75,7 +74,7 @@ struct DataFormat {
     GLenum data_type;
 };
 
-std::optional<DataFormat> gl_data_format(mugfx_pixel_format format)
+static std::optional<DataFormat> gl_data_format(mugfx_pixel_format format)
 {
     switch (format) {
     case MUGFX_PIXEL_FORMAT_RGB8:
@@ -101,7 +100,7 @@ std::optional<DataFormat> gl_data_format(mugfx_pixel_format format)
     }
 }
 
-std::optional<GLenum> gl_wrap_mode(mugfx_texture_wrap_mode wrap)
+static std::optional<GLenum> gl_wrap_mode(mugfx_texture_wrap_mode wrap)
 {
     switch (wrap) {
     case MUGFX_TEXTURE_WRAP_REPEAT:
@@ -115,7 +114,7 @@ std::optional<GLenum> gl_wrap_mode(mugfx_texture_wrap_mode wrap)
     }
 }
 
-std::optional<GLenum> gl_min_filter(mugfx_texture_min_filter filter)
+static std::optional<GLenum> gl_min_filter(mugfx_texture_min_filter filter)
 {
     switch (filter) {
     case MUGFX_TEXTURE_MIN_FILTER_NEAREST:
@@ -135,7 +134,7 @@ std::optional<GLenum> gl_min_filter(mugfx_texture_min_filter filter)
     }
 }
 
-std::optional<GLenum> gl_mag_filter(mugfx_texture_mag_filter filter)
+static std::optional<GLenum> gl_mag_filter(mugfx_texture_mag_filter filter)
 {
     switch (filter) {
     case MUGFX_TEXTURE_MAG_FILTER_NEAREST:
@@ -147,7 +146,7 @@ std::optional<GLenum> gl_mag_filter(mugfx_texture_mag_filter filter)
     }
 }
 
-bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
+static bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
 {
     // TODO: Save this per target!
     static std::array<GLuint, 64> current_texture_2d = {};
@@ -172,7 +171,7 @@ bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
     return true;
 }
 
-std::optional<GLenum> gl_buffer_target(mugfx_buffer_target target)
+static std::optional<GLenum> gl_buffer_target(mugfx_buffer_target target)
 {
     switch (target) {
     case MUGFX_BUFFER_TARGET_ARRAY:
@@ -186,7 +185,7 @@ std::optional<GLenum> gl_buffer_target(mugfx_buffer_target target)
     }
 }
 
-std::optional<GLenum> gl_buffer_usage(mugfx_buffer_usage_hint usage)
+static std::optional<GLenum> gl_buffer_usage(mugfx_buffer_usage_hint usage)
 {
     switch (usage) {
     case MUGFX_BUFFER_USAGE_HINT_STATIC:
@@ -200,7 +199,7 @@ std::optional<GLenum> gl_buffer_usage(mugfx_buffer_usage_hint usage)
     }
 }
 
-size_t get_buffer_target_index(GLenum target)
+static size_t get_buffer_target_index(GLenum target)
 {
     switch (target) {
     case GL_ARRAY_BUFFER:
@@ -214,7 +213,7 @@ size_t get_buffer_target_index(GLenum target)
     }
 }
 
-bool bind_buffer(GLenum target, GLuint buffer)
+static bool bind_buffer(GLenum target, GLuint buffer)
 {
     static std::array<GLuint, 3> current_buffers = {};
     auto& current_buffer = current_buffers.at(get_buffer_target_index(target));
@@ -229,7 +228,7 @@ bool bind_buffer(GLenum target, GLuint buffer)
     return true;
 }
 
-std::optional<GLenum> gl_depth_func(mugfx_depth_func func)
+static std::optional<GLenum> gl_depth_func(mugfx_depth_func func)
 {
     switch (func) {
     case MUGFX_DEPTH_FUNC_NEVER:
@@ -261,7 +260,7 @@ struct WriteMask {
     bool depth;
 };
 
-std::optional<WriteMask> gl_write_mask(mugfx_write_mask mask)
+static std::optional<WriteMask> gl_write_mask(mugfx_write_mask mask)
 {
     if (mask == 0) {
         return std::nullopt;
@@ -278,7 +277,7 @@ std::optional<WriteMask> gl_write_mask(mugfx_write_mask mask)
     };
 }
 
-std::optional<GLenum> gl_cull_face_mode(mugfx_cull_face_mode mode)
+static std::optional<GLenum> gl_cull_face_mode(mugfx_cull_face_mode mode)
 {
     switch (mode) {
     case MUGFX_CULL_FACE_MODE_NONE:
@@ -294,7 +293,7 @@ std::optional<GLenum> gl_cull_face_mode(mugfx_cull_face_mode mode)
     }
 }
 
-std::optional<GLenum> gl_blend_func(mugfx_blend_func func)
+static std::optional<GLenum> gl_blend_func(mugfx_blend_func func)
 {
     switch (func) {
     case MUGFX_BLEND_FUNC_ZERO:
@@ -322,7 +321,7 @@ std::optional<GLenum> gl_blend_func(mugfx_blend_func func)
     }
 }
 
-std::optional<GLenum> gl_polygon_mode(mugfx_polygon_mode mode)
+static std::optional<GLenum> gl_polygon_mode(mugfx_polygon_mode mode)
 {
     switch (mode) {
     case MUGFX_POLYGON_MODE_FILL:
@@ -336,7 +335,7 @@ std::optional<GLenum> gl_polygon_mode(mugfx_polygon_mode mode)
     }
 }
 
-std::optional<GLenum> gl_stencil_func(mugfx_stencil_func func)
+static std::optional<GLenum> gl_stencil_func(mugfx_stencil_func func)
 {
     switch (func) {
     case MUGFX_STENCIL_FUNC_NEVER:
@@ -360,7 +359,7 @@ std::optional<GLenum> gl_stencil_func(mugfx_stencil_func func)
     }
 }
 
-bool bind_shader(GLuint program)
+static bool bind_shader(GLuint program)
 {
     static GLuint current_program = 0;
     if (current_program != program) {
@@ -379,7 +378,7 @@ struct IndexType {
     GLboolean normalized;
 };
 
-std::optional<IndexType> gl_vertex_attribute_type(mugfx_vertex_attribute_type type)
+static std::optional<IndexType> gl_vertex_attribute_type(mugfx_vertex_attribute_type type)
 {
     switch (type) {
     case MUGFX_VERTEX_ATTRIBUTE_TYPE_F32:
@@ -411,7 +410,7 @@ std::optional<IndexType> gl_vertex_attribute_type(mugfx_vertex_attribute_type ty
     }
 }
 
-size_t get_attribute_size(mugfx_vertex_attribute_type type, size_t components)
+static size_t get_attribute_size(mugfx_vertex_attribute_type type, size_t components)
 {
     assert(components >= 1 && components <= 4);
     switch (type) {
@@ -446,7 +445,7 @@ size_t get_attribute_size(mugfx_vertex_attribute_type type, size_t components)
     }
 }
 
-std::optional<GLenum> gl_draw_mode(mugfx_draw_mode mode)
+static std::optional<GLenum> gl_draw_mode(mugfx_draw_mode mode)
 {
     switch (mode) {
     case MUGFX_DRAW_MODE_TRIANGLES:
@@ -462,7 +461,7 @@ std::optional<GLenum> gl_draw_mode(mugfx_draw_mode mode)
     }
 }
 
-std::optional<GLenum> gl_index_type(mugfx_index_type type)
+static std::optional<GLenum> gl_index_type(mugfx_index_type type)
 {
     switch (type) {
     case MUGFX_INDEX_TYPE_U8:
@@ -476,7 +475,7 @@ std::optional<GLenum> gl_index_type(mugfx_index_type type)
     }
 }
 
-std::optional<size_t> get_index_size(GLenum type)
+static std::optional<size_t> get_index_size(GLenum type)
 {
     switch (type) {
     case GL_UNSIGNED_BYTE:
@@ -490,7 +489,7 @@ std::optional<size_t> get_index_size(GLenum type)
     }
 }
 
-bool bind_vao(GLuint vao)
+static bool bind_vao(GLuint vao)
 {
     static GLuint current_vao = 0;
     if (current_vao != vao) {
@@ -576,11 +575,10 @@ struct Geometry {
 };
 
 template <typename T>
-Pool<T>& get_pool(size_t size = 0)
+static Pool<T>& get_pool(size_t size = 0)
 {
     static Pool<T> pool(size);
     return pool;
-}
 }
 
 EXPORT void mugfx_init(mugfx_init_params params)
@@ -1817,7 +1815,7 @@ bool apply_uniforms(const Material& mat, mugfx_uniform_data_id uniform_data)
 
 EXPORT void mugfx_begin_frame() { }
 
-void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
+EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings)
 {
     const auto mat = get_pool<Material>().get(material.id);
