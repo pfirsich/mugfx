@@ -454,25 +454,21 @@ typedef enum {
 } mugfx_binding_type;
 
 typedef struct {
-    struct uniform_data {
-        mugfx_uniform_data_id id;
-    };
-
-    struct buffer {
-        uint32_t binding;
-        mugfx_buffer_id id;
-    };
-
-    struct texture {
-        uint32_t binding;
-        mugfx_texture_id id;
-    };
-
     mugfx_binding_type type;
     union {
-        struct uniform_data uniform_data;
-        struct buffer buffer;
-        struct texture texture;
+        struct {
+            mugfx_uniform_data_id id;
+        } uniform_data;
+
+        struct {
+            uint32_t binding;
+            mugfx_buffer_id id;
+        } buffer;
+
+        struct {
+            uint32_t binding;
+            mugfx_texture_id id;
+        } texture;
     };
 } mugfx_draw_binding;
 
