@@ -65,6 +65,7 @@ typedef struct {
 } mugfx_init_params;
 
 void mugfx_init(mugfx_init_params params);
+void mugfx_shutdown(); // Doesn't actually free all resources, but must be called
 
 typedef struct {
     const void* data;

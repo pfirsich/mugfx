@@ -151,4 +151,6 @@ int main()
         mugfx_end_frame();
         window.swap();
     }
+
+    mugfx_shutdown();
 }

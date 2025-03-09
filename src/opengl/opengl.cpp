@@ -3,8 +3,7 @@
 #include <memory>
 #include <optional>
 
-// VSCode doesn't find it at <glad/glad.h>
-#include "glad/include/glad/glad.h"
+#include "glad/include/glad/gl.h"
 
 #include "../shared.hpp"
 
@@ -24,10 +23,10 @@ const char* gl_error_string(GLenum error)
         return "GL_INVALID_FRAMEBUFFER_OPERATION";
     case GL_OUT_OF_MEMORY:
         return "GL_OUT_OF_MEMORY";
-    case GL_STACK_UNDERFLOW:
+    /*case GL_STACK_UNDERFLOW:
         return "GL_STACK_UNDERFLOW";
     case GL_STACK_OVERFLOW:
-        return "GL_STACK_OVERFLOW";
+        return "GL_STACK_OVERFLOW";*/
     default:
         return "UNKNOWN";
     }
@@ -587,13 +586,18 @@ Pool<T>& get_pool(size_t size = 0)
 EXPORT void mugfx_init(mugfx_init_params params)
 {
     common_init(params);
-    gladLoadGL(); // Not sure if I need to change something here re ES vs. Core
+    gladLoaderLoadGL();
     get_pool<Shader>(params.max_num_shaders);
     get_pool<Texture>(params.max_num_textures);
     get_pool<Material>(params.max_num_materials);
     get_pool<Buffer>(params.max_num_buffers);
     get_pool<UniformData>(params.max_num_uniforms);
     get_pool<Geometry>(params.max_num_geometries);
+}
+
+EXPORT void mugfx_shutdown()
+{
+    gladLoaderUnloadGL();
 }
 
 namespace {
