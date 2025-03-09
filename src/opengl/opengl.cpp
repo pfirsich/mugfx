@@ -1913,9 +1913,10 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     bind_vao(0);
 }
 
-void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id geometry,
+EXPORT void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings, size_t instance_count)
 {
+    log_error("mugfx_draw_instanced not implemented yet");
 }
 
 EXPORT void mugfx_flush() { }
