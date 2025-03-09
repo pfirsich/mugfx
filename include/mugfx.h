@@ -435,13 +435,18 @@ typedef struct {
     size_t samples;
 } mugfx_render_target_create_params;
 
+#define MUGFX_RENDER_TARGET_BACKBUFFER                                                             \
+    (mugfx_render_target_id)                                                                       \
+    {                                                                                              \
+        0                                                                                          \
+    }
+
 mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_create_params params);
 void mugfx_render_target_blit_to_render_target(
     mugfx_render_target_id src_target, mugfx_render_target_id dst_target);
 void mugfx_render_target_blit_to_texture(
     mugfx_render_target_id src_target, mugfx_texture_id dst_texture);
 void mugfx_render_target_destroy(mugfx_render_target_id target);
-void mugfx_render_target_bind(mugfx_render_target_id target);
 
 // Dynamic Pipeline State
 void mugfx_set_viewport(int x, int y, size_t width, size_t height);
@@ -476,12 +481,14 @@ typedef struct {
 } mugfx_draw_binding;
 
 void mugfx_begin_frame();
+void mugfx_begin_pass(mugfx_render_target_id target);
 void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings);
 void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings, size_t instance_count);
 void mugfx_flush();
-void mugfx_end_frame();
+void mugfx_end_pass(); // flushes
+void mugfx_end_frame(); // flushes
 
 #ifdef __cplusplus
 }

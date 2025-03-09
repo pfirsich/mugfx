@@ -595,6 +595,17 @@ static Pool<T>& get_pool(size_t size = 0)
     return pool;
 }
 
+struct Pass {
+    mugfx_render_target_id target;
+    bool in_pass = false;
+};
+
+static Pass& get_current_pass()
+{
+    static Pass pass;
+    return pass;
+}
+
 EXPORT void mugfx_init(mugfx_init_params params)
 {
     common_init(params);
@@ -1829,9 +1840,25 @@ bool apply_uniforms(const Material& mat, mugfx_uniform_data_id uniform_data)
 
 EXPORT void mugfx_begin_frame() { }
 
+EXPORT void mugfx_begin_pass(mugfx_render_target_id target)
+{
+    auto& pass = get_current_pass();
+    if (pass.in_pass) {
+        log_error("Cannot begin another pass");
+        return;
+    }
+    pass.in_pass = true;
+    pass.target = target;
+}
+
 EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings)
 {
+    if (!get_current_pass().in_pass) {
+        log_error("Cannot draw outside a pass");
+        return;
+    }
+
     const auto mat = get_pool<Material>().get(material.id);
     if (!mat) {
         log_error("Material ID %u does not exist", material.id);
@@ -1893,4 +1920,22 @@ void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id geometry
 
 EXPORT void mugfx_flush() { }
 
-EXPORT void mugfx_end_frame() { }
+EXPORT void mugfx_end_pass()
+{
+    auto& pass = get_current_pass();
+    if (!pass.in_pass) {
+        log_error("Cannot end a pass outside a pass");
+        return;
+    }
+    pass.in_pass = false;
+    mugfx_flush();
+}
+
+EXPORT void mugfx_end_frame()
+{
+    if (get_current_pass().in_pass) {
+        log_error("Cannot end frame in a pass");
+        return;
+    }
+    mugfx_flush();
+}
