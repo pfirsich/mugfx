@@ -825,20 +825,20 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
     return { key };
 }
 
-void mugfx_shader_destroy(mugfx_shader_id shader)
+EXPORT void mugfx_shader_destroy(mugfx_shader_id shader_id)
 {
-    const auto tex = get_pool<Shader>().get(shader.id);
-    if (!tex) {
-        log_error("Shader ID %u does not exist", shader.id);
+    const auto shader = get_pool<Shader>().get(shader_id.id);
+    if (!shader) {
+        log_error("Shader ID %u does not exist", shader_id.id);
         return;
     }
 
-    glDeleteShader(shader.id);
+    glDeleteShader(shader->shader);
     if (const auto error = glGetError()) {
-        log_error("Failed to delete shader %u: %s", shader.id, gl_error_string(error));
+        log_error("Failed to delete shader %u: %s", shader_id.id, gl_error_string(error));
     }
 
-    get_pool<Shader>().remove(shader.id);
+    get_pool<Shader>().remove(shader_id.id);
 }
 
 EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
