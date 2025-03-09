@@ -197,6 +197,11 @@ void default_init(mugfx_buffer_create_params& params)
     set_default(params.usage, MUGFX_BUFFER_USAGE_HINT_STATIC);
 }
 
+void default_init(mugfx_uniform_data_create_params& params)
+{
+    set_default(params.usage_hint, MUGFX_UNIFORM_DATA_USAGE_HINT_FRAME);
+}
+
 void default_init(mugfx_geometry_create_params& params)
 {
     set_default(params.draw_mode, MUGFX_DRAW_MODE_TRIANGLES);

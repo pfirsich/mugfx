@@ -15,8 +15,7 @@ enum {
     MUGFX_MAX_UNIFORMS = 32,
     MUGFX_MAX_MATERIAL_UNIFORMS = 8,
     MUGFX_MAX_COLOR_FORMATS = 8,
-    MUGFX_MAX_SHADER_UNIFORM_DESCRIPTORS = 8,
-    MUGFX_MAX_SHADER_SAMPLERS = 16,
+    MUGFX_MAX_SHADER_BINDINGS = 16,
 };
 
 typedef enum {
@@ -73,62 +72,16 @@ typedef struct {
     size_t length;
 } mugfx_slice;
 
+#define MUGFX_SLICE_OBJ(obj)                                                                       \
+    (mugfx_slice)                                                                                  \
+    {                                                                                              \
+        .data = &obj, .length = sizeof(obj)                                                        \
+    }
+
 typedef struct {
     size_t offset;
     size_t length;
 } mugfx_range;
-
-// Uniform Descriptor
-typedef enum {
-    MUGFX_UNIFORMS_SCOPE_DEFAULT = 0,
-    MUGFX_UNIFORMS_SCOPE_CONSTANT,
-    MUGFX_UNIFORMS_SCOPE_FRAME,
-    MUGFX_UNIFORMS_SCOPE_DRAW,
-} mugfx_uniforms_scope;
-
-// For OpenGL std140 is used, for which you should prefer to use vec4 and mat4 only.
-// vec3 will be stored as a vec4, mat2 as vec4[2] and mat3 as vec4[3], so they will work, but are
-// wasteful.
-typedef enum {
-    MUGFX_UNIFORM_TYPE_DEFAULT = 0,
-    MUGFX_UNIFORM_TYPE_FLOAT,
-    MUGFX_UNIFORM_TYPE_VEC2,
-    MUGFX_UNIFORM_TYPE_VEC3,
-    MUGFX_UNIFORM_TYPE_VEC4,
-    MUGFX_UNIFORM_TYPE_INT,
-    MUGFX_UNIFORM_TYPE_IVEC2,
-    MUGFX_UNIFORM_TYPE_IVEC3,
-    MUGFX_UNIFORM_TYPE_IVEC4,
-    MUGFX_UNIFORM_TYPE_UINT,
-    MUGFX_UNIFORM_TYPE_UVEC2,
-    MUGFX_UNIFORM_TYPE_UVEC3,
-    MUGFX_UNIFORM_TYPE_UVEC4,
-    MUGFX_UNIFORM_TYPE_MAT2,
-    MUGFX_UNIFORM_TYPE_MAT3,
-    MUGFX_UNIFORM_TYPE_MAT4,
-    MUGFX_UNIFORM_TYPE_MAT2X3,
-    MUGFX_UNIFORM_TYPE_MAT3X2,
-    MUGFX_UNIFORM_TYPE_MAT2X4,
-    MUGFX_UNIFORM_TYPE_MAT4X2,
-    MUGFX_UNIFORM_TYPE_MAT3X4,
-    MUGFX_UNIFORM_TYPE_MAT4X3,
-} mugfx_uniform_type;
-
-typedef struct {
-    const char* name;
-    mugfx_uniform_type type;
-    size_t array_size;
-    size_t offset;
-} mugfx_uniform;
-
-typedef struct {
-    mugfx_uniforms_scope usage_hint; // default: FRAME
-    mugfx_uniform uniforms[MUGFX_MAX_UNIFORMS];
-    size_t size;
-    uint32_t binding; // optional for OpenGL backends, mandatory for Vulkan
-} mugfx_uniform_descriptor;
-
-void mugfx_uniform_descriptor_calculate_layout(mugfx_uniform_descriptor* uniform_descriptor);
 
 // Shader
 typedef struct {
@@ -141,21 +94,28 @@ typedef enum {
     MUGFX_SHADER_STAGE_FRAGMENT,
 } mugfx_shader_stage;
 
+typedef enum {
+    MUGFX_SHADER_BINDING_TYPE_NONE = 0,
+    MUGFX_SHADER_BINDING_TYPE_UNIFORM,
+    MUGFX_SHADER_BINDING_TYPE_SAMPLER,
+} mugfx_shader_binding_type;
+
 typedef struct {
-    const char* name;
-    // This is the texture unit in OpenGL (like the binding layout qualifier) or the actual binding
-    // number in Vulkan
+    mugfx_shader_binding_type type;
+    // OpenGL:For a sampler, binding is the texture unit (equal to the binding layout qualifier in
+    // the shader). The binding number is ignored if glUniform is used.
+    // Vulkan: the actual binding number. The set number is derived automatically.
     uint32_t binding;
-} mugfx_shader_sampler;
+} mugfx_shader_binding;
 
 typedef struct {
     mugfx_shader_stage stage;
-    const char* source;
-    const mugfx_uniform_descriptor* uniform_descriptors[MUGFX_MAX_SHADER_UNIFORM_DESCRIPTORS];
-    mugfx_shader_sampler samplers[MUGFX_MAX_SHADER_SAMPLERS];
+    const char* source; // GLSL or SPIR-V
+    mugfx_shader_binding bindings[MUGFX_MAX_SHADER_BINDINGS];
 } mugfx_shader_create_params;
 
 mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params);
+mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader, size_t idx);
 void mugfx_shader_destroy(mugfx_shader_id shader);
 
 // Texture
@@ -342,21 +302,30 @@ typedef struct {
     uint32_t id;
 } mugfx_uniform_data_id;
 
+// This gives a hint on what this data is used for. I.e. once per frame, or once per draw
+typedef enum {
+    MUGFX_UNIFORM_DATA_USAGE_HINT_DEFAULT = 0,
+    MUGFX_UNIFORM_DATA_USAGE_HINT_CONSTANT, // e.g. screen dimensions, camera projection, ...
+    MUGFX_UNIFORM_DATA_USAGE_HINT_FRAME, // e.g. view matrix, time, lights, ...
+    MUGFX_UNIFORM_DATA_USAGE_HINT_DRAW, // e.g. model matrix, skinning, some material params, ...
+} mugfx_uniform_data_usage_hint;
+
 typedef struct {
-    // The descriptor pointer has to be the same as the one passed to mugfx_shader_create.
-    const mugfx_uniform_descriptor* descriptor;
-    mugfx_buffer_id buffer; // optional
-    mugfx_range buffer_range; // optional
+    mugfx_uniform_data_usage_hint usage_hint; // default: FRAME
+    size_t size;
+    // cpu_buffer must live as long as the uniform buffer itself, if given.
+    // It's length must be >= size
+    void* cpu_buffer; // optional, will be allocated otherwise
 } mugfx_uniform_data_create_params;
 
-// This is essentially a local buffer and a dirty flag, plus a reference to a pool of gpu uniform
-// buffers (or a slice of one), also a copy of the uniform descriptor.
+// This is essentially a cpu buffer and a dirty flag, plus a reference to a pool of gpu uniform
+// buffers (or a slice of one).
 mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create_params params);
-void mugfx_uniform_data_set_float(
-    mugfx_uniform_data_id uniform_data, const char* name, mugfx_slice data);
-void mugfx_uniform_data_set_texture(
-    mugfx_uniform_data_id uniforms, const char* name, mugfx_texture_id texture);
-void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniforms);
+// This function marks the uniform data as dirty, assuming this pointer is used to modify it
+void* mugfx_uniform_data_get_ptr(mugfx_uniform_data_id uniform_data);
+// If you passed cpu_buffer, this will mark the data dirty and schedule an update of the GPU buffer
+void mugfx_uniform_data_update(mugfx_uniform_data_id uniform_data);
+void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data);
 
 // Geometry
 typedef struct {
@@ -465,6 +434,7 @@ typedef struct {
     mugfx_binding_type type;
     union {
         struct {
+            uint32_t binding;
             mugfx_uniform_data_id id;
         } uniform_data;
 

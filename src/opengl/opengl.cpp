@@ -518,15 +518,8 @@ static bool bind_vao(GLuint vao)
 }
 
 struct Shader {
-    struct Sampler {
-        StackString<> name;
-        uint32_t binding;
-    };
-
     GLuint shader;
-    std::array<Sampler, MUGFX_MAX_SHADER_SAMPLERS> samplers;
-    std::array<const mugfx_uniform_descriptor*, MUGFX_MAX_SHADER_UNIFORM_DESCRIPTORS>
-        uniform_descriptors;
+    std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> bindings;
 };
 
 struct Texture {
@@ -537,11 +530,6 @@ struct Texture {
 };
 
 struct Material {
-    struct UniformBlock {
-        const mugfx_uniform_descriptor* uniform_descriptor;
-        std::array<GLint, MUGFX_MAX_UNIFORMS> locations;
-    };
-
     mugfx_shader_id vert_shader;
     mugfx_shader_id frag_shader;
     GLuint shader_program;
@@ -556,28 +544,24 @@ struct Material {
     GLenum stencil_func;
     int stencil_ref;
     uint32_t stencil_mask;
-    // `2 *` because of vert and frag
-    std::array<UniformBlock, 2 * MUGFX_MAX_SHADER_UNIFORM_DESCRIPTORS> uniform_blocks;
+    std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> frag_bindings;
+    std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> vert_bindings;
 };
 
 struct Buffer {
     GLenum target;
     GLuint buffer;
     size_t size;
-};
-
-struct UniformMetadata {
-    StackString<> name;
-    mugfx_uniform_type type;
-    size_t array_size = 0;
-    size_t offset = 0;
+    GLenum usage;
 };
 
 struct UniformData {
-    const mugfx_uniform_descriptor* descriptor;
-    std::array<UniformMetadata, MUGFX_MAX_UNIFORMS> metadata;
-    size_t size = 0;
-    std::unique_ptr<uint8_t> data = {};
+    mugfx_uniform_data_usage_hint usage;
+    mugfx_buffer_id buffer = {};
+    mugfx_range buffer_range = {};
+    std::byte* cpu_buffer = nullptr;
+    bool cpu_buffer_owned = false;
+    bool dirty = false;
 };
 
 struct Geometry {
@@ -621,161 +605,6 @@ EXPORT void mugfx_init(mugfx_init_params params)
 EXPORT void mugfx_shutdown()
 {
     gladLoaderUnloadGL();
-}
-
-namespace {
-// std140
-// https://www.khronos.org/opengl/wiki/OpenGL_Type
-// https://registry.khronos.org/OpenGL/specs/gl/glspec45.core.pdf#page=159
-size_t get_uniform_size(mugfx_uniform_type type, size_t array_size)
-{
-    if (array_size > 0) {
-        switch (type) {
-        // All scalars in GLSL are 4 bytes (including bool)
-        case MUGFX_UNIFORM_TYPE_FLOAT:
-        case MUGFX_UNIFORM_TYPE_INT:
-        case MUGFX_UNIFORM_TYPE_UINT:
-        case MUGFX_UNIFORM_TYPE_VEC2:
-        case MUGFX_UNIFORM_TYPE_VEC3:
-        case MUGFX_UNIFORM_TYPE_VEC4:
-        case MUGFX_UNIFORM_TYPE_IVEC2:
-        case MUGFX_UNIFORM_TYPE_IVEC3:
-        case MUGFX_UNIFORM_TYPE_IVEC4:
-        case MUGFX_UNIFORM_TYPE_UVEC2:
-        case MUGFX_UNIFORM_TYPE_UVEC3:
-        case MUGFX_UNIFORM_TYPE_UVEC4:
-            // all sizes are rounded up to vec4
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC4, 0) * array_size;
-        case MUGFX_UNIFORM_TYPE_MAT2:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC2, 2 * array_size);
-        case MUGFX_UNIFORM_TYPE_MAT3:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC3, 3 * array_size);
-        case MUGFX_UNIFORM_TYPE_MAT4:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC4, 4 * array_size);
-        case MUGFX_UNIFORM_TYPE_MAT2X3:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC3, 2 * array_size);
-        case MUGFX_UNIFORM_TYPE_MAT3X2:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC2, 3 * array_size);
-        case MUGFX_UNIFORM_TYPE_MAT2X4:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC4, 2 * array_size);
-        case MUGFX_UNIFORM_TYPE_MAT4X2:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC2, 4 * array_size);
-        case MUGFX_UNIFORM_TYPE_MAT3X4:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC4, 3 * array_size);
-        case MUGFX_UNIFORM_TYPE_MAT4X3:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC3, 4 * array_size);
-        default:
-            return 0;
-        }
-    } else {
-        switch (type) {
-        // All scalars in GLSL are 4 bytes (including bool)
-        case MUGFX_UNIFORM_TYPE_FLOAT:
-        case MUGFX_UNIFORM_TYPE_INT:
-        case MUGFX_UNIFORM_TYPE_UINT:
-            return 4;
-        // vec
-        case MUGFX_UNIFORM_TYPE_VEC2:
-        case MUGFX_UNIFORM_TYPE_IVEC2:
-        case MUGFX_UNIFORM_TYPE_UVEC2:
-            return 2 * 4;
-        case MUGFX_UNIFORM_TYPE_VEC3:
-        case MUGFX_UNIFORM_TYPE_IVEC3:
-        case MUGFX_UNIFORM_TYPE_IVEC4:
-            return 3 * 4;
-        case MUGFX_UNIFORM_TYPE_VEC4:
-        case MUGFX_UNIFORM_TYPE_UVEC3:
-        case MUGFX_UNIFORM_TYPE_UVEC4:
-            return 4 * 4;
-        // Matrices are column-major by default
-        case MUGFX_UNIFORM_TYPE_MAT2:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC2, 2);
-        case MUGFX_UNIFORM_TYPE_MAT3:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC3, 3);
-        case MUGFX_UNIFORM_TYPE_MAT4:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC4, 4);
-        case MUGFX_UNIFORM_TYPE_MAT2X3:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC3, 2);
-        case MUGFX_UNIFORM_TYPE_MAT3X2:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC2, 3);
-        case MUGFX_UNIFORM_TYPE_MAT2X4:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC4, 2);
-        case MUGFX_UNIFORM_TYPE_MAT4X2:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC2, 4);
-        case MUGFX_UNIFORM_TYPE_MAT3X4:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC4, 3);
-        case MUGFX_UNIFORM_TYPE_MAT4X3:
-            return get_uniform_size(MUGFX_UNIFORM_TYPE_VEC3, 4);
-        default:
-            return 0;
-        }
-    }
-}
-
-size_t get_uniform_alignment(mugfx_uniform_type type, size_t array_size)
-{
-    if (array_size > 0) {
-        return get_uniform_alignment(MUGFX_UNIFORM_TYPE_VEC4, 0);
-    }
-    switch (type) {
-    // All scalars in GLSL are 4 bytes (including bool)
-    case MUGFX_UNIFORM_TYPE_FLOAT:
-    case MUGFX_UNIFORM_TYPE_INT:
-    case MUGFX_UNIFORM_TYPE_UINT:
-        return get_uniform_size(type, 0);
-    case MUGFX_UNIFORM_TYPE_VEC2:
-    case MUGFX_UNIFORM_TYPE_IVEC2:
-    case MUGFX_UNIFORM_TYPE_UVEC2:
-        return 2 * get_uniform_size(MUGFX_UNIFORM_TYPE_FLOAT, 0);
-    case MUGFX_UNIFORM_TYPE_VEC3:
-    case MUGFX_UNIFORM_TYPE_VEC4:
-    case MUGFX_UNIFORM_TYPE_IVEC3:
-    case MUGFX_UNIFORM_TYPE_IVEC4:
-    case MUGFX_UNIFORM_TYPE_UVEC3:
-    case MUGFX_UNIFORM_TYPE_UVEC4:
-        return 4 * get_uniform_size(MUGFX_UNIFORM_TYPE_FLOAT, 0);
-    // These are all arrays of vec, so they are all aligned to vec4
-    case MUGFX_UNIFORM_TYPE_MAT2:
-    case MUGFX_UNIFORM_TYPE_MAT3:
-    case MUGFX_UNIFORM_TYPE_MAT4:
-    case MUGFX_UNIFORM_TYPE_MAT2X3:
-    case MUGFX_UNIFORM_TYPE_MAT3X2:
-    case MUGFX_UNIFORM_TYPE_MAT2X4:
-    case MUGFX_UNIFORM_TYPE_MAT4X2:
-    case MUGFX_UNIFORM_TYPE_MAT3X4:
-    case MUGFX_UNIFORM_TYPE_MAT4X3:
-        return 4 * get_uniform_size(MUGFX_UNIFORM_TYPE_FLOAT, 0);
-    default:
-        return 0;
-    }
-}
-
-size_t align(size_t offset, size_t alignment)
-{
-    const auto misalignment = offset % alignment;
-    if (misalignment == 0) {
-        return offset;
-    }
-    return offset + alignment - misalignment;
-}
-}
-
-void mugfx_uniform_descriptor_calculate_layout(mugfx_uniform_descriptor* uniform_descriptor)
-{
-    size_t offset = 0;
-    size_t max_alignment = 0;
-    for (size_t i = 0; i < MUGFX_MAX_UNIFORMS; ++i) {
-        auto& uniform = uniform_descriptor->uniforms[i];
-        if (!uniform.name || !uniform.type) {
-            break;
-        }
-        const auto uniform_alignment = get_uniform_alignment(uniform.type, uniform.array_size);
-        offset = align(offset, uniform_alignment);
-        max_alignment = uniform_alignment > max_alignment ? uniform_alignment : max_alignment;
-        uniform.offset = offset;
-        offset += get_uniform_size(uniform.type, uniform.array_size);
-    }
-    uniform_descriptor->size = align(offset, max_alignment);
 }
 
 EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
@@ -827,27 +656,27 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
 
     Shader pool_shader {
         .shader = shader,
-        .samplers = {},
-        .uniform_descriptors = {},
+        .bindings = {},
     };
 
-    for (size_t i = 0; i < MUGFX_MAX_SHADER_SAMPLERS; ++i) {
-        const auto name = StackString<>::create(params.samplers[i].name);
-        if (!name) {
-            log_error("Sampler name '%s' too long", params.samplers[i].name);
-            glDeleteShader(shader);
-            return { 0 };
-        }
-        pool_shader.samplers[i].name = *name;
-        pool_shader.samplers[i].binding = params.samplers[i].binding;
-    }
-
-    for (size_t i = 0; i < MUGFX_MAX_SHADER_UNIFORM_DESCRIPTORS; ++i) {
-        pool_shader.uniform_descriptors[i] = params.uniform_descriptors[i];
-    }
+    std::memcpy(&pool_shader.bindings[0], &params.bindings[0],
+        sizeof(mugfx_shader_binding) * MUGFX_MAX_SHADER_BINDINGS);
 
     const auto key = get_pool<Shader>().insert(std::move(pool_shader));
     return { key };
+}
+
+EXPORT mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader_id, size_t idx)
+{
+    const auto shader = get_pool<Shader>().get(shader_id.id);
+    if (!shader) {
+        log_error("Shader ID %u does not exist", shader_id.id);
+        return {};
+    }
+    if (idx >= MUGFX_MAX_SHADER_BINDINGS) {
+        return { .type = MUGFX_SHADER_BINDING_TYPE_NONE };
+    }
+    return shader->bindings[idx];
 }
 
 EXPORT void mugfx_shader_destroy(mugfx_shader_id shader_id)
@@ -998,48 +827,6 @@ EXPORT void mugfx_texture_destroy(mugfx_texture_id texture)
     get_pool<Texture>().remove(texture.id);
 }
 
-namespace {
-std::optional<size_t> add_uniform_blocks(Material& mat, const Shader& shader, size_t start_index)
-{
-    auto index = start_index;
-    for (size_t i = 0; i < MUGFX_MAX_SHADER_UNIFORM_DESCRIPTORS; ++i) {
-        const auto desc = shader.uniform_descriptors[i];
-        if (!desc) {
-            break;
-        }
-        auto& ub = mat.uniform_blocks[index];
-        ub.uniform_descriptor = desc;
-        ub.locations.fill(-1);
-        for (size_t u = 0; u < MUGFX_MAX_UNIFORMS; ++u) {
-            if (!desc->uniforms[u].type) {
-                break;
-            }
-            ub.locations[u] = glGetUniformLocation(mat.shader_program, desc->uniforms[u].name);
-            if (ub.locations[u] == -1) {
-                log_error("Could not get location for uniform '%s'", desc->uniforms[u].name);
-                return std::nullopt;
-            }
-        }
-        index++;
-    }
-    return index;
-};
-
-bool get_sampler_locations(
-    GLuint prog, const Shader& shader, std::array<GLint, MUGFX_MAX_SHADER_SAMPLERS>& locations)
-{
-    locations.fill(-1);
-    for (size_t i = 0; i < MUGFX_MAX_SHADER_SAMPLERS && !shader.samplers[i].name.empty(); ++i) {
-        locations[i] = glGetUniformLocation(prog, shader.samplers[i].name.c_str());
-        if (locations[i] == -1) {
-            log_error("No uniform with name '%s'", shader.samplers[i].name.c_str());
-            return false;
-        }
-    }
-    return true;
-}
-}
-
 EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params params)
 {
     default_init(params);
@@ -1158,42 +945,12 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
         .stencil_func = *stencil_func,
         .stencil_ref = params.stencil_ref,
         .stencil_mask = params.stencil_mask,
-        .uniform_blocks = {},
     };
     std::memcpy(mat.blend_color.data(), params.blend_color, 4 * sizeof(float));
-
-    auto index = add_uniform_blocks(mat, *vert, 0);
-    if (!index) {
-        glDeleteProgram(prog);
-        return { 0 };
-    }
-
-    index = add_uniform_blocks(mat, *frag, *index);
-    if (!index) {
-        glDeleteProgram(prog);
-        return { 0 };
-    }
-
-    std::array<GLint, MUGFX_MAX_SHADER_SAMPLERS> vert_sampler_locations = {};
-    if (!get_sampler_locations(prog, *vert, vert_sampler_locations)) {
-        glDeleteProgram(prog);
-        return { 0 };
-    }
-
-    std::array<GLint, MUGFX_MAX_SHADER_SAMPLERS> frag_sampler_locations = {};
-    if (!get_sampler_locations(prog, *frag, frag_sampler_locations)) {
-        glDeleteProgram(prog);
-        return { 0 };
-    }
-
-    bind_shader(prog);
-    for (size_t i = 0; i < MUGFX_MAX_SHADER_SAMPLERS && !vert->samplers[i].name.empty(); ++i) {
-        glUniform1i(vert_sampler_locations[i], vert->samplers[i].binding);
-    }
-    for (size_t i = 0; i < MUGFX_MAX_SHADER_SAMPLERS && !frag->samplers[i].name.empty(); ++i) {
-        glUniform1i(frag_sampler_locations[i], frag->samplers[i].binding);
-    }
-    bind_shader(0);
+    std::memcpy(mat.frag_bindings.data(), frag->bindings.data(),
+        MUGFX_MAX_SHADER_BINDINGS * sizeof(mugfx_shader_binding));
+    std::memcpy(mat.vert_bindings.data(), vert->bindings.data(),
+        MUGFX_MAX_SHADER_BINDINGS * sizeof(mugfx_shader_binding));
 
     const auto key = get_pool<Material>().insert(std::move(mat));
     return { key };
@@ -1252,6 +1009,7 @@ EXPORT mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params)
         .target = *target,
         .buffer = buffer,
         .size = params.data.length,
+        .usage = *usage,
     });
 
     return { key };
@@ -1300,202 +1058,108 @@ EXPORT void mugfx_buffer_destroy(mugfx_buffer_id buffer)
     get_pool<Buffer>().remove(buffer.id);
 }
 
-mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create_params params)
+static mugfx_buffer_usage_hint get_buffer_usage(mugfx_uniform_data_usage_hint usage)
 {
-    mugfx_uniform_descriptor desc = *params.descriptor;
-    mugfx_uniform_descriptor_calculate_layout(&desc);
+    switch (usage) {
+    case MUGFX_UNIFORM_DATA_USAGE_HINT_CONSTANT:
+        return MUGFX_BUFFER_USAGE_HINT_STATIC;
+    case MUGFX_UNIFORM_DATA_USAGE_HINT_FRAME:
+        return MUGFX_BUFFER_USAGE_HINT_DYNAMIC;
+    case MUGFX_UNIFORM_DATA_USAGE_HINT_DRAW:
+        return MUGFX_BUFFER_USAGE_HINT_STREAM;
+    default:
+        return MUGFX_BUFFER_USAGE_HINT_DEFAULT;
+    }
+}
+
+EXPORT mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create_params params)
+{
+    default_init(params);
+
+    if (!params.size) {
+        log_error("Uniform data size must be greater zero");
+        return { 0 };
+    }
+
+    // TODO: Be much smarter about this
+    const auto buffer_id = mugfx_buffer_create({
+        .target = MUGFX_BUFFER_TARGET_UNIFORM,
+        .usage = get_buffer_usage(params.usage_hint),
+        .data = { .data = params.cpu_buffer, .length = params.size },
+    });
+    const mugfx_range buffer_range = { .offset = 0, .length = params.size };
+
+    auto buffer = get_pool<Buffer>().get(buffer_id.id);
+    if (!buffer) {
+        log_error("Buffer ID %u does not exist", buffer_id.id);
+        return { 0 };
+    }
+
+    std::byte* cpu_buffer = reinterpret_cast<std::byte*>(params.cpu_buffer);
+    if (!cpu_buffer) {
+        cpu_buffer = new std::byte[params.size];
+        std::memset(cpu_buffer, 0, params.size);
+    }
 
     UniformData ub {
-        .descriptor = params.descriptor,
-        .metadata = {},
-        .size = desc.size,
-        .data = std::unique_ptr<uint8_t>(reinterpret_cast<uint8_t*>(allocate(desc.size))),
+        .usage = params.usage_hint,
+        .buffer = buffer_id,
+        .buffer_range = buffer_range,
+        .cpu_buffer = cpu_buffer,
+        .cpu_buffer_owned = params.cpu_buffer != nullptr,
     };
-    std::memset(ub.data.get(), 0, desc.size);
-
-    for (size_t i = 0; i < MUGFX_MAX_UNIFORMS; ++i) {
-        const auto& u = params.descriptor->uniforms[i];
-        if (!u.type) {
-            break;
-        }
-
-        if (u.name) {
-            const auto name = StackString<>::create(u.name);
-            if (!name) {
-                log_error("Invalid uniform name '%s'", u.name);
-                return { 0 };
-            }
-            ub.metadata[i].name = *name;
-        }
-        ub.metadata[i].type = u.type;
-        ub.metadata[i].array_size = u.array_size;
-        ub.metadata[i].offset = u.offset;
-    }
 
     const auto key = get_pool<UniformData>().insert(std::move(ub));
     return { key };
 }
 
-namespace {
-size_t get_uniform_index(UniformData& ub, const char* name)
+EXPORT void* mugfx_uniform_data_get_ptr(mugfx_uniform_data_id uniform_data_id)
 {
-    for (size_t i = 0; i < MUGFX_MAX_UNIFORMS; ++i) {
-        if (ub.metadata[i].type && ub.metadata[i].name == name) {
-            return i;
-        }
+    const auto udata = get_pool<UniformData>().get(uniform_data_id.id);
+    if (!udata) {
+        log_error("Uniform data ID %u does not exist", uniform_data_id.id);
+        return nullptr;
     }
-    return MUGFX_MAX_UNIFORMS;
+    udata->dirty = true;
+    return udata->cpu_buffer;
 }
 
-size_t get_float_uniform_data_size(mugfx_uniform_type type)
+EXPORT void mugfx_uniform_data_update(mugfx_uniform_data_id uniform_data_id)
 {
-    switch (type) {
-    case MUGFX_UNIFORM_TYPE_FLOAT:
-        return 4;
-    case MUGFX_UNIFORM_TYPE_VEC2:
-        return 2 * 4;
-    case MUGFX_UNIFORM_TYPE_VEC3:
-        return 3 * 4;
-    case MUGFX_UNIFORM_TYPE_VEC4:
-        return 4 * 4;
-    case MUGFX_UNIFORM_TYPE_MAT2:
-        return 2 * 2 * 4;
-    case MUGFX_UNIFORM_TYPE_MAT3:
-        return 3 * 3 * 4;
-    case MUGFX_UNIFORM_TYPE_MAT4:
-        return 4 * 4 * 4;
-    case MUGFX_UNIFORM_TYPE_MAT2X3:
-        return 2 * 3 * 4;
-    case MUGFX_UNIFORM_TYPE_MAT3X2:
-        return 3 * 2 * 4;
-    case MUGFX_UNIFORM_TYPE_MAT2X4:
-        return 2 * 4 * 4;
-    case MUGFX_UNIFORM_TYPE_MAT4X2:
-        return 4 * 2 * 4;
-    case MUGFX_UNIFORM_TYPE_MAT3X4:
-        return 3 * 4 * 4;
-    case MUGFX_UNIFORM_TYPE_MAT4X3:
-        return 4 * 3 * 4;
-    default:
-        return 0; // non-float
+    const auto udata = get_pool<UniformData>().get(uniform_data_id.id);
+    if (!udata) {
+        log_error("Uniform data ID %u does not exist", uniform_data_id.id);
+        return;
     }
+    udata->dirty = true;
 }
 
-const char* get_uniform_type_name(mugfx_uniform_type type)
+EXPORT void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data_id)
 {
-    switch (type) {
-    case MUGFX_UNIFORM_TYPE_FLOAT:
-        return "float";
-    case MUGFX_UNIFORM_TYPE_VEC2:
-        return "vec2";
-    case MUGFX_UNIFORM_TYPE_VEC3:
-        return "vec3";
-    case MUGFX_UNIFORM_TYPE_VEC4:
-        return "vec4";
-    case MUGFX_UNIFORM_TYPE_INT:
-        return "int";
-    case MUGFX_UNIFORM_TYPE_IVEC2:
-        return "ivec2";
-    case MUGFX_UNIFORM_TYPE_IVEC3:
-        return "ivec3";
-    case MUGFX_UNIFORM_TYPE_IVEC4:
-        return "ivec4";
-    case MUGFX_UNIFORM_TYPE_UINT:
-        return "uint";
-    case MUGFX_UNIFORM_TYPE_UVEC2:
-        return "uvec2";
-    case MUGFX_UNIFORM_TYPE_UVEC3:
-        return "uvec3";
-    case MUGFX_UNIFORM_TYPE_UVEC4:
-        return "uvec4";
-    case MUGFX_UNIFORM_TYPE_MAT2:
-        return "mat2";
-    case MUGFX_UNIFORM_TYPE_MAT3:
-        return "mat3";
-    case MUGFX_UNIFORM_TYPE_MAT4:
-        return "mat4";
-    case MUGFX_UNIFORM_TYPE_MAT2X3:
-        return "mat2x3";
-    case MUGFX_UNIFORM_TYPE_MAT3X2:
-        return "mat3x2";
-    case MUGFX_UNIFORM_TYPE_MAT2X4:
-        return "mat2x4";
-    case MUGFX_UNIFORM_TYPE_MAT4X2:
-        return "mat4x2";
-    case MUGFX_UNIFORM_TYPE_MAT3X4:
-        return "mat3x4";
-    case MUGFX_UNIFORM_TYPE_MAT4X3:
-        return "mat4x3";
-    default:
-        return "invalid";
+    const auto udata = get_pool<UniformData>().get(uniform_data_id.id);
+    if (!udata) {
+        log_error("Uniform data ID %u does not exist", uniform_data_id.id);
+        return;
     }
-}
+    if (udata->cpu_buffer_owned) {
+        delete[] udata->cpu_buffer;
+    }
+    get_pool<UniformData>().remove(uniform_data_id.id);
 }
 
-void mugfx_uniform_data_set_float(
-    mugfx_uniform_data_id uniform_data, const char* name, mugfx_slice data)
+static bool update_uniform_data(UniformData* udata, Buffer* buffer)
 {
-    const auto ub = get_pool<UniformData>().get(uniform_data.id);
-    if (!ub) {
-        log_error("Uniform Data ID %u does not exist", uniform_data.id);
-        return;
+    // TODO: Make this faster
+    if (!bind_buffer(GL_UNIFORM_BUFFER, buffer->buffer)) {
+        return false;
     }
-
-    const auto idx = get_uniform_index(*ub, name);
-    if (idx >= MUGFX_MAX_UNIFORMS) {
-        log_error("Unknown uniform name '%s'", name);
-        return;
+    glBufferSubData(GL_UNIFORM_BUFFER, udata->buffer_range.offset, udata->buffer_range.length,
+        udata->cpu_buffer);
+    if (const auto error = glGetError()) {
+        log_error("Error in glBufferSubData: %s", gl_error_string(error));
+        return false;
     }
-
-    const auto& uniform = ub->metadata[idx];
-    const auto data_size = get_float_uniform_data_size(uniform.type);
-    if (data_size == 0) {
-        log_error(
-            "Trying to set float data for uniform of type %s", get_uniform_type_name(uniform.type));
-        return;
-    }
-    if (data.length != data_size) {
-        log_error(
-            "Incorrect data length for uniform of type %s", get_uniform_type_name(uniform.type));
-        return;
-    }
-    // TODO: For e.g. mat2 transform the passed data into a format for the uniform buffer (as soon
-    // as I start using them)
-    std::memcpy(ub->data.get(), data.data, data.length);
-}
-
-void mugfx_uniform_data_set_texture(
-    mugfx_uniform_data_id uniform_data, const char* name, mugfx_texture_id texture)
-{
-    const auto ub = get_pool<UniformData>().get(uniform_data.id);
-    if (!ub) {
-        log_error("Uniform Data ID %u does not exist", uniform_data.id);
-        return;
-    }
-
-    const auto idx = get_uniform_index(*ub, name);
-    if (idx >= MUGFX_MAX_UNIFORMS) {
-        log_error("Unknown uniform name '%s'", name);
-        return;
-    }
-
-    const auto& uniform = ub->metadata[idx];
-    if (uniform.type != MUGFX_UNIFORM_TYPE_INT) {
-        log_error(
-            "Trying to set texture for uniform of type %s", get_uniform_type_name(uniform.type));
-        return;
-    }
-    std::memcpy(ub->data.get(), &texture.id, sizeof(uint32_t));
-}
-
-void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data)
-{
-    const auto buf = get_pool<UniformData>().get(uniform_data.id);
-    if (!buf) {
-        log_error("Uniform data ID %u does not exist", uniform_data.id);
-        return;
-    }
-    get_pool<UniformData>().remove(uniform_data.id);
+    return true;
 }
 
 EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params params)
@@ -1718,126 +1382,6 @@ EXPORT void mugfx_set_viewport(int x, int y, size_t width, size_t height)
 
 EXPORT void mugfx_set_scissor(int x, int y, size_t width, size_t height) { }
 
-namespace {
-bool set_uniform(const UniformMetadata& uniform, GLint loc, const uint8_t* data)
-{
-    const auto count = uniform.array_size ? static_cast<GLsizei>(uniform.array_size) : 1;
-    const auto fdata = reinterpret_cast<const GLfloat*>(data + uniform.offset);
-    const auto idata = reinterpret_cast<const GLint*>(data + uniform.offset);
-    const auto udata = reinterpret_cast<const GLuint*>(data + uniform.offset);
-    switch (uniform.type) {
-    case MUGFX_UNIFORM_TYPE_FLOAT:
-        glUniform1fv(loc, count, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_VEC2:
-        glUniform2fv(loc, count, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_VEC3:
-        glUniform3fv(loc, count, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_VEC4:
-        glUniform4fv(loc, count, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_INT:
-        glUniform1i(loc, 0);
-        break;
-    case MUGFX_UNIFORM_TYPE_IVEC2:
-        glUniform2iv(loc, count, idata);
-        break;
-    case MUGFX_UNIFORM_TYPE_IVEC3:
-        glUniform3iv(loc, count, idata);
-        break;
-    case MUGFX_UNIFORM_TYPE_IVEC4:
-        glUniform4iv(loc, count, idata);
-        break;
-    case MUGFX_UNIFORM_TYPE_UINT:
-        glUniform1uiv(loc, count, udata);
-        break;
-    case MUGFX_UNIFORM_TYPE_UVEC2:
-        glUniform2uiv(loc, count, udata);
-        break;
-    case MUGFX_UNIFORM_TYPE_UVEC3:
-        glUniform3uiv(loc, count, udata);
-        break;
-    case MUGFX_UNIFORM_TYPE_UVEC4:
-        glUniform4uiv(loc, count, udata);
-        break;
-    case MUGFX_UNIFORM_TYPE_MAT2:
-        glUniformMatrix2fv(loc, count, GL_FALSE, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_MAT3:
-        glUniformMatrix3fv(loc, count, GL_FALSE, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_MAT4:
-        glUniformMatrix4fv(loc, count, GL_FALSE, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_MAT2X3:
-        glUniformMatrix2x3fv(loc, count, GL_FALSE, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_MAT3X2:
-        glUniformMatrix3x2fv(loc, count, GL_FALSE, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_MAT2X4:
-        glUniformMatrix2x4fv(loc, count, GL_FALSE, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_MAT4X2:
-        glUniformMatrix4x2fv(loc, count, GL_FALSE, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_MAT3X4:
-        glUniformMatrix3x4fv(loc, count, GL_FALSE, fdata);
-        break;
-    case MUGFX_UNIFORM_TYPE_MAT4X3:
-        glUniformMatrix4x3fv(loc, count, GL_FALSE, fdata);
-        break;
-    default:
-        log_error("Invalid uniform type %d", uniform.type);
-        return false;
-    }
-    if (const auto error = glGetError()) {
-        log_error("Error in glUniform: %s", gl_error_string(error));
-        return false;
-    }
-    return true;
-}
-
-const Material::UniformBlock* find_uniform_block(
-    const Material& mat, const mugfx_uniform_descriptor* desc)
-{
-    for (const auto& ub : mat.uniform_blocks) {
-        if (ub.uniform_descriptor == desc) {
-            return &ub;
-        }
-    }
-    return nullptr;
-}
-
-bool apply_uniforms(const Material& mat, mugfx_uniform_data_id uniform_data)
-{
-    const auto ud = get_pool<UniformData>().get(uniform_data.id);
-    if (!ud) {
-        log_error("Uniform data ID %u does not exist", uniform_data.id);
-        return false;
-    }
-
-    for (size_t i = 0; i < MUGFX_MAX_UNIFORMS; ++i) {
-        if (!ud->metadata[i].type) {
-            break;
-        }
-        const auto ub = find_uniform_block(mat, ud->descriptor);
-        if (!ub) {
-            log_error("No uniform block with descriptor in material");
-            return false;
-        }
-        // TODO: Use a span here for safety
-        if (!set_uniform(ud->metadata[i], ub->locations[i], ud->data.get())) {
-            return false;
-        }
-    }
-
-    return true;
-}
-}
-
 EXPORT void mugfx_begin_frame() { }
 
 EXPORT void mugfx_begin_pass(mugfx_render_target_id target)
@@ -1877,7 +1421,27 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
 
     for (size_t i = 0; i < num_bindings; ++i) {
         if (bindings[i].type == MUGFX_BINDING_TYPE_UNIFORM_DATA) {
-            if (!apply_uniforms(*mat, bindings[i].uniform_data.id)) {
+            const auto udata = get_pool<UniformData>().get(bindings[i].uniform_data.id.id);
+            if (!udata) {
+                log_error("Uniform data ID %u does not exist", bindings[i].uniform_data.id.id);
+                return;
+            }
+
+            const auto buffer = get_pool<Buffer>().get(udata->buffer.id);
+            assert(buffer);
+            if (!buffer) {
+                log_error("Buffer ID %u does not exist", udata->buffer.id);
+                return;
+            }
+
+            if (udata->dirty) {
+                if (!update_uniform_data(udata, buffer)) {
+                    return;
+                }
+            }
+
+            if (!bind_buffer(buffer->target, buffer->buffer, bindings[i].uniform_data.binding,
+                    udata->buffer_range)) {
                 return;
             }
         } else if (bindings[i].type == MUGFX_BINDING_TYPE_TEXTURE) {

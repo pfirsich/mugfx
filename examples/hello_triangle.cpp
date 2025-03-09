@@ -7,9 +7,11 @@
 #include "window.hpp"
 
 const auto vert_source = R"(
-    #version 330 core
+    #version 420 core
 
-    uniform mat4 u_projection_matrix;
+    layout (binding = 0, std140) uniform UConstant {
+        mat4 projection;
+    };
 
     layout (location = 0) in vec3 a_position;
     layout (location = 1) in vec2 a_texcoord;
@@ -20,14 +22,18 @@ const auto vert_source = R"(
 
     void main() {
         vs_out.texcoord = a_texcoord;
-        gl_Position = u_projection_matrix * vec4(a_position, 1.0);
+        gl_Position = projection * vec4(a_position, 1.0);
     }
 )";
 
-const auto frag_source = R"(
-    #version 330 core
+struct UConstant {
+    std::array<float, 16> projection;
+};
 
-    uniform sampler2D u_base;
+const auto frag_source = R"(
+    #version 420 core
+
+    layout(binding = 0) uniform sampler2D u_base;
 
     in VsOut {
         vec2 texcoord;
@@ -36,7 +42,7 @@ const auto frag_source = R"(
     out vec4 frag_color;
 
     void main() {
-        frag_color = texture2D(u_base, vs_out.texcoord);
+        frag_color = texture(u_base, vs_out.texcoord);
     }
 )";
 
@@ -61,20 +67,19 @@ int main()
         .debug = true,
     });
 
-    const mugfx_uniform_descriptor vs_uniforms {
-        .uniforms = { { .name = "u_projection_matrix", .type = MUGFX_UNIFORM_TYPE_MAT4 }, },
-    };
     const auto vert_shader = mugfx_shader_create({
         .stage = MUGFX_SHADER_STAGE_VERTEX,
         .source = vert_source,
-        .uniform_descriptors = { &vs_uniforms },
+        .bindings = {
+            { .type = MUGFX_SHADER_BINDING_TYPE_UNIFORM, .binding = 0 },
+        },
     });
 
     const auto frag_shader = mugfx_shader_create({
         .stage = MUGFX_SHADER_STAGE_FRAGMENT,
         .source = frag_source,
-        .samplers = {
-            { .name = "u_base", .binding = 0 },
+        .bindings = {
+            { .type = MUGFX_SHADER_BINDING_TYPE_SAMPLER, .binding = 0 },
         },
     });
 
@@ -127,11 +132,10 @@ int main()
         .index_type = MUGFX_INDEX_TYPE_U16,
     });
 
-    const auto vs_uniform_data = mugfx_uniform_data_create({ .descriptor = &vs_uniforms });
-    std::array<float, 16> projection_matrix = { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f };
-    mugfx_uniform_data_set_float(
-        vs_uniform_data, "u_projection_matrix", { projection_matrix.data(), 16 * sizeof(float) });
+    const auto vs_uniform_data = mugfx_uniform_data_create({ .size = sizeof(UConstant) });
+    auto ubuf = (UConstant*)mugfx_uniform_data_get_ptr(vs_uniform_data);
+    ubuf->projection = { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f };
 
     std::array<mugfx_draw_binding, 2> bindings {
         mugfx_draw_binding {
