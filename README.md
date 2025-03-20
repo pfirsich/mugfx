@@ -2,25 +2,61 @@
 
 This is the smallest possible graphics library (hence "micro") that I can use as an abstraction layer on top of OpenGL 4 (which I know how to use), WebGL 2 (OpenGL ES 3.0) and possibly Vulkan in the future.
 
-I heard a lot that after Vulkan is released there should be other high-level graphics APIs on top of it as alternative to OpenGL, but I don't see a lot of them (see alternatives below). I want something like that, so I am giving it a go myself.
+I heard a lot that after Vulkan would be released there should be other high-level graphics APIs on top of it as alternative to OpenGL, but I don't see a lot of them (see alternatives below). I want something like that, so I am giving it a go myself.
 
-Generally I try to keep more abstractions from OpenGL than from the newer APIs, because I want it to be simpler (e.g. `Texture` vs. `Image` + `Sampler`). Also you kind of need to read a book to understand how Vulkan works and if you want to use a graphics API abstraction library that supports Vulkan, you almost always need to understand Vulkan too, which imho defeats the point. This is intended for people that have rendered a few things here and there and know how to use OpenGL/WebGL. The modern graphics APIs allow a lot of control, but they have a very high complexity and OpenGL does not allow that much control, but is fairly simple. This is somewhat in the middle, but way closer to OpenGL. Essentially is a variation of OpenGL with a few tweaks to make it more compatible with modern graphics APIs.
+You kind of need to read a book to understand how Vulkan works and if you want to use a graphics API abstraction library that supports Vulkan, you almost always need to understand Vulkan too, which imho defeats the point of the library. This is intended for people that have rendered a few things here and there and know how to use OpenGL/WebGL. The modern graphics APIs allow a lot of control, but they have a very high complexity and OpenGL does not allow that much control, but is fairly simple. This is somewhat in the middle, but way closer to OpenGL. Essentially it is a variation of OpenGL with a few tweaks to make it more compatible with modern graphics APIs.
 
-I like to imagine that the header should be self-explanatory for someone that knows how to use OpenGL and roughly how rendering works. The big difference to OpenGL is that most data structure are immutable, so we can turn a lot of the functions that change properties into an argument to the `_create` function. This include sizes for textures and buffers.
+To be clear, I designed this library as an intermediate step to possibly using Vulkan some day. Don't use.
 
-To keep this small, this library also does no IO (apart from interfacing with a graphics library), i.e. it won't load any files or create windows or anything like that. The only dependency of this library is the graphics library you are compiling it for.
+To keep it small, this library also does no IO (apart from interfacing with a graphics library), i.e. it won't load any files or create windows or anything like that. The only dependency of this library is the graphics library you are compiling it for.
 
-## Basic Usage
+## Documentation
 
-## Shaders
+### Overview
+
+I like to imagine that the header should be self-explanatory for someone that knows how to use OpenGL and roughly how rendering works. The big difference to OpenGL is that most data structure are immutable, so we can turn a lot of the functions that change properties into an argument to the `*_create` functions. This include sizes for textures and buffers. Also most of OpenGL's global state is encapsulated by objects in mugfx. The following explanations are assuming an OpenGL background and are intended at devs that know how to use OpenGL, but not a modern rendering API.
+
+Have a look at [hello_triangle.cpp](examples/hello_triangle.cpp) to get a rough idea of what you need to do to get something on the screen.
+
+### General
+
+Of course you need to initialize and shutdown the library with `mugfx_init` and `mugfx_shutdown`. Apart from uniform data all CPU-side dynamic allocations will happen in `mugfx_init`. If you need other limits (`MUGFX_MAX_*`), you can just change them and recompile the library.
+
+Every object in mugfx is identified with an id that forms a generational index. An id of 0 is always an invalid object id and, if returned, indicates an error or, if used, generates an error. Inside parameter structs it indicates that no object is referenced.
+
+### Shaders & Uniforms
 
 Shaders are annoying to do properly cross-platform, because they simply are not. In OpenGL you can just load GLSL and reflect that GLSL (enumerate all the uniforms and their type info), but in Vulkan you have to load an intermediate SPIR-V representation and provide reflected uniform information you retrieved externally. Additionally the old-school OpenGL way of setting uniforms is setting them by name and retrieving uniform locations requires a handle to a shader. In Vulkan you set uniforms through uniform buffers only, which may be bound to multiple pipelines (i.e. independent of shader objects).
 
-Therefore findind a common abstraction is a pain. I had multiple iterations of the uniform handling API and they all stank more than the current one. I still want it to be possible to use glUniform in case that proves to be more performant in some cases (which you can frequently read online). Therefore I added a high-level uniform data abstraction that has a hint that describes how the uniform data is used to optimize the storage for these uniforms. But the fundamental uniform storage CPU-side is simply a struct, i.e. maps to a uniform buffer. Every uniform block should map to a uniform data object. To get rid of the names I require binding layout specifier support and ergo OpenGL 4.2. I might re-evaluate this in the future. If uniforms have to be set using glUniform, mugfx will reflect the uniforms from the shader program and extract the data from the CPU-side copies of the uniform buffers.
+Therefore finding a common abstraction is a pain. I had multiple iterations of the uniform handling API and they all stank. I still want it to be possible for mugfx to use glUniform in case that proves to be more performant in some cases (which you can easily find online). Therefore I added a high-level uniform data abstraction that has a hint that describes how the uniform data is used to optimize the storage for these uniforms. But the fundamental uniform storage CPU-side is simply a struct, i.e. maps to a uniform buffer. Every uniform block should map to a uniform data object. To get rid of the names I require binding layout specifier support (OpenGL 4.2). I might re-evaluate this in the future. If uniforms have to be set using glUniform, mugfx will reflect the uniforms from the shader program and extract the data from the CPU-side copies of the uniform buffers.
 
-Use std140 layout, because that is the only portable option. Ideally use a common subset of std140 and std430. This means you should only use scalars, two and four dimensional vectors and mat4. Sort your fields from largest to smallest.
+So now you have to set binding locations explicitly in the shader through binding layout specifiers and also specify the used binding points during shader creation. Then during drawing you can pass resources to be bound to these binding locations. This does not require any uniform names.
+
+Additionally it is recommended to use uniform buffers in WebGL 2 for best performance.
+
+### Uniform Data
+
+These wrap a uniform buffer, a cpu side buffer of the uniform data and a dirty flag.
+
+The uniform data must be in std140 layout, because that is the most platform-independent. Ideally you should use a common subset of std140 and std430. This means you should only use scalars, two and four dimensional vectors and mat4. Sort your fields from largest to smallest.
 
 In std140 layout can be quite wasteful as vec3 takes up as much space as vec4 and mat3 as much as mat4. This is another reason these types should be avoided.
+
+### Textures
+
+This is very similar to OpenGL, but it compared to Vulkan these encapsulate a texture and a sampler.
+
+### Materials
+
+These contain most of the fixed function global state in OpenGL and for Vulkan they partially wrap a pipeline. Vulkan pipelines are actually created dynamically for material/geometry pairs.
+
+### Rendering
+
+All `mugfx_draw_*` and `mugfx_clear` calls need to happen between `mugfx_begin_pass` and `mugfx_end_pass`, both of which need to be between `mugfx_begin_frame` and `mugfx_end_frame`. You can have multiple passes per frame.
+
+Every resources has to be explicitly passed to `mugfx_draw`. The shaders are part of the material and all geometry related data is part of the geometry object. Other buffers, like textures and uniforms, need to be passed through a `mugfx_draw_binding`. You need to specify the binding point of a resources in the shaders and specify the used binding points when the shader is created. Then during drawing you should bind resources to the specified binding points.
+
+Draw and clear calls are not actually sumitted to the GPU unless you call `mugfx_flush`, which is implied by ending a pass or a frame.
 
 ## Vulkan
 
@@ -48,6 +84,9 @@ Vulkan is an interesting target, because its so close to the other APIs one migh
 * Figure out how to export symbols on Windows properly
 * Disable checks when debug is not set
 * Consider OpenGL 3.3 support (only thing missing is binding layout qualifier) - add optional `name` to `mugfx_shader_binding` to map uniform blocks/samplers to bindings.
+* Shader Storage Buffers
+* Compute Shaders
+* Queries?
 * Vulkan backend
 * Object Labels:
     - https://www.khronos.org/opengl/wiki/Debug_Output#Scoping_messages
