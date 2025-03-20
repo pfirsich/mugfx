@@ -451,12 +451,31 @@ typedef struct {
     };
 } mugfx_draw_binding;
 
+typedef enum {
+    MUGFX_CLEAR_COLOR = 1 << 0,
+    MUGFX_CLEAR_DEPTH = 1 << 1,
+    MUGFX_CLEAR_STENCIL = 1 << 2,
+    MUGFX_CLEAR_COLOR_DEPTH = MUGFX_CLEAR_COLOR | MUGFX_CLEAR_DEPTH,
+    MUGFX_CLEAR_DEPTH_STENCIL = MUGFX_CLEAR_DEPTH | MUGFX_CLEAR_STENCIL,
+    MUGFX_CLEAR_ALL = MUGFX_CLEAR_COLOR | MUGFX_CLEAR_DEPTH | MUGFX_CLEAR_STENCIL
+} mugfx_clear_mask;
+
+typedef struct {
+    float color[4]; // default: {0.0f, 0.0f, 0.0f, 0.0f}
+    float depth; // default: 1.0f
+    int stencil; // default: 0
+} mugfx_clear_values;
+
 void mugfx_begin_frame();
 void mugfx_begin_pass(mugfx_render_target_id target);
+
+void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values);
+
 void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings);
 void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings, size_t instance_count);
+
 void mugfx_flush();
 void mugfx_end_pass(); // flushes
 void mugfx_end_frame(); // flushes

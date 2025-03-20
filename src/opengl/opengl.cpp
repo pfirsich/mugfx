@@ -1395,6 +1395,24 @@ EXPORT void mugfx_begin_pass(mugfx_render_target_id target)
     pass.target = target;
 }
 
+void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values)
+{
+    GLenum gl_mask = 0;
+    if (mask & MUGFX_CLEAR_COLOR) {
+        glClearColor(values.color[0], values.color[1], values.color[2], values.color[3]);
+        gl_mask |= GL_COLOR_BUFFER_BIT;
+    }
+    if (mask & MUGFX_CLEAR_DEPTH) {
+        glClearDepthf(values.depth);
+        gl_mask |= GL_DEPTH_BUFFER_BIT;
+    }
+    if (mask & MUGFX_CLEAR_STENCIL) {
+        glClearStencil(values.stencil);
+        gl_mask |= GL_STENCIL_BUFFER_BIT;
+    }
+    glClear(gl_mask);
+}
+
 EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings)
 {
