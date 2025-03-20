@@ -602,9 +602,29 @@ EXPORT void mugfx_init(mugfx_init_params params)
     get_pool<Geometry>(params.max_num_geometries);
 }
 
+template <typename T, typename DestroyFunc>
+static void destroy_all(DestroyFunc destroy)
+{
+    auto& pool = get_pool<T>();
+    for (size_t i = 0; i < pool.capacity(); ++i) {
+        const auto key = pool.get_key(i);
+        if (key) {
+            destroy({ key });
+        }
+    }
+}
+
 EXPORT void mugfx_shutdown()
 {
+    destroy_all<Shader>(mugfx_shader_destroy);
+    destroy_all<Texture>(mugfx_texture_destroy);
+    destroy_all<Material>(mugfx_material_destroy);
+    destroy_all<Buffer>(mugfx_buffer_destroy);
+    destroy_all<UniformData>(mugfx_uniform_data_destroy);
+    destroy_all<Geometry>(mugfx_geometry_destroy);
+#ifndef MUGFX_WEBGL
     gladLoaderUnloadGL();
+#endif
 }
 
 EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)

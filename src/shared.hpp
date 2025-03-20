@@ -81,6 +81,11 @@ struct Pool {
         return ids_[idx].combine();
     }
 
+    uint32_t get_key(size_t idx)
+    {
+        return idx < size_ && ids_[idx].idx == idx ? ids_[idx].combine() : 0;
+    }
+
     bool contains(uint32_t key)
     {
         const auto id = Id(key);
