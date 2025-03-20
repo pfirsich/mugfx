@@ -627,6 +627,36 @@ EXPORT void mugfx_shutdown()
 #endif
 }
 
+EXPORT const char* mugfx_get_renderer_name()
+{
+    const auto renderer = glGetString(GL_RENDERER);
+    assert(renderer);
+    return reinterpret_cast<const char*>(renderer);
+}
+
+EXPORT const char* mugfx_get_vendor_name()
+{
+    const auto vendor = glGetString(GL_VENDOR);
+    assert(vendor);
+    return reinterpret_cast<const char*>(vendor);
+}
+
+EXPORT const char* mugfx_get_api_name()
+{
+#ifdef MUGFX_WEBGL
+    return "WebGL";
+#else
+    return "OpenGL";
+#endif
+}
+
+EXPORT const char* mugfx_get_api_version()
+{
+    const auto version = glGetString(GL_VERSION);
+    assert(version);
+    return reinterpret_cast<const char*>(version);
+}
+
 EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
 {
     default_init(params);

@@ -67,6 +67,10 @@ int main()
         .debug = true,
     });
 
+    std::printf("Renderer: %s\n", mugfx_get_renderer_name());
+    std::printf("Vendor: %s\n", mugfx_get_vendor_name());
+    std::printf("API: %s\n", mugfx_get_api_version());
+
     const auto vert_shader = mugfx_shader_create({
         .stage = MUGFX_SHADER_STAGE_VERTEX,
         .source = vert_source,

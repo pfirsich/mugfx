@@ -65,7 +65,15 @@ typedef struct {
 } mugfx_init_params;
 
 void mugfx_init(mugfx_init_params params);
-void mugfx_shutdown(); // Doesn't actually free all resources, but must be called
+
+// Doesn't actually free all memory but destroys all resources and must be called
+void mugfx_shutdown();
+
+// The strings returned here are owned by mugfx
+const char* mugfx_get_renderer_name();
+const char* mugfx_get_vendor_name();
+const char* mugfx_get_api_name(); // "OpenGL", "WebGL" or "Vulkan"
+const char* mugfx_get_api_version();
 
 typedef struct {
     const void* data;
