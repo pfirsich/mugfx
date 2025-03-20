@@ -94,7 +94,7 @@ void deallocate(void* ptr, size_t size)
 void log(mugfx_severity severity, const char* msg)
 {
     const auto panic_handler = get_panic_handler();
-    if (severity > MUGFX_SEVERITY_ERROR && panic_handler) {
+    if (severity >= MUGFX_SEVERITY_ERROR && panic_handler) {
         panic_handler(msg);
         std::abort();
     }
