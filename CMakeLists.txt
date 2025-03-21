@@ -6,26 +6,34 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
-set(MUGFX_BACKEND_OPTIONS OpenGL)
-set(MUGFX_BACKEND OpenGL CACHE STRING "Backend")
+set(MUGFX_BACKEND_OPTIONS OpenGL WebGL)
+if(EMSCRIPTEN)
+  set(MUGFX_BACKEND WebGL CACHE STRING "Backend")
+else()
+  set(MUGFX_BACKEND OpenGL CACHE STRING "Backend")
+endif()
 set_property(CACHE MUGFX_BACKEND PROPERTY STRINGS ${MUGFX_BACKEND_OPTIONS})
+message(STATUS "Building with backend: ${MUGFX_BACKEND}")
 
 include(wall)
 
 option(MUGFX_ENABLE_ASAN "Enable ASan" OFF)
-if (MUGFX_ENABLE_ASAN)
+if (MUGFX_ENABLE_ASAN AND NOT EMSCRIPTEN)
   include(asan)
 endif()
 
 set(MUGFX_SRC "src/shared.cpp")
 
 if(MUGFX_BACKEND STREQUAL OpenGL)
-  message("Building with OpenGL backend")
   list(APPEND MUGFX_SRC "src/opengl/opengl.cpp")
 
   add_library(glad "src/opengl/glad/src/gl.c")
   target_include_directories(glad SYSTEM PRIVATE "src/opengl/glad/include")
   target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
+endif()
+
+if(MUGFX_BACKEND STREQUAL WebGL)
+  list(APPEND MUGFX_SRC "src/opengl/opengl.cpp")
 endif()
 
 add_library(mugfx STATIC ${MUGFX_SRC})
@@ -36,6 +44,22 @@ set_wall(mugfx)
 if(MUGFX_BACKEND STREQUAL OpenGL)
   target_compile_definitions(mugfx PRIVATE MUGFX_OPENGL)
   target_link_libraries(mugfx PRIVATE glad)
+endif()
+
+if(MUGFX_BACKEND STREQUAL WebGL)
+  find_package(OpenGL REQUIRED COMPONENTS GL)
+
+  target_include_directories(mugfx PUBLIC ${OPENGL_INCLUDE_DIRS})
+  target_link_libraries(mugfx PUBLIC OpenGL::GL)
+  target_compile_definitions(mugfx PUBLIC MUGFX_WEBGL)
+
+  if (EMSCRIPTEN)
+    target_link_options(mugfx PUBLIC
+      -sMAX_WEBGL_VERSION=2
+      -sMIN_WEBGL_VERSION=2
+      -sGL_EXPLICIT_UNIFORM_BINDING=1 # required for binding layout specifiers
+    )
+  endif()
 endif()
 
 # This will only be true if this project is not used as a subdirectory (e.g. FetchContent)

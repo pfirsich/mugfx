@@ -6,9 +6,12 @@
 
 #include "window.hpp"
 
-const auto vert_source = R"(
-    #version 420 core
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
+// #version directives will be inserted by mugfx
+const auto vert_source = R"(
     layout (binding = 0, std140) uniform UConstant {
         mat4 projection;
     };
@@ -16,12 +19,11 @@ const auto vert_source = R"(
     layout (location = 0) in vec3 a_position;
     layout (location = 1) in vec2 a_texcoord;
 
-    out VsOut {
-        vec2 texcoord;
-    } vs_out;
+    // No interface blocks in WebGL
+    out vec2 vs_out_texcoord;
 
     void main() {
-        vs_out.texcoord = a_texcoord;
+        vs_out_texcoord = a_texcoord;
         gl_Position = projection * vec4(a_position, 1.0);
     }
 )";
@@ -31,18 +33,13 @@ struct UConstant {
 };
 
 const auto frag_source = R"(
-    #version 420 core
-
     layout(binding = 0) uniform sampler2D u_base;
 
-    in VsOut {
-        vec2 texcoord;
-    } vs_out;
-
+    in vec2 vs_out_texcoord;
     out vec4 frag_color;
 
     void main() {
-        frag_color = texture(u_base, vs_out.texcoord);
+        frag_color = texture(u_base, vs_out_texcoord);
     }
 )";
 
@@ -75,6 +72,7 @@ int main()
         .stage = MUGFX_SHADER_STAGE_VERTEX,
         .source = vert_source,
         .bindings = {
+            // Note this matches the binding layout specifier in the shader
             { .type = MUGFX_SHADER_BINDING_TYPE_UNIFORM, .binding = 0 },
         },
     });
@@ -83,6 +81,7 @@ int main()
         .stage = MUGFX_SHADER_STAGE_FRAGMENT,
         .source = frag_source,
         .bindings = {
+            // This also matches the binding layout specifier in the shader
             { .type = MUGFX_SHADER_BINDING_TYPE_SAMPLER, .binding = 0 },
         },
     });
@@ -122,6 +121,7 @@ int main()
         .data = { indices.data(), indices.size() * sizeof(indices[0]) },
     });
 
+    // This encapsulates your vertex layout and references the necessary buffers
     const auto geometry = mugfx_geometry_create({
         .vertex_buffers = {
             {
@@ -144,7 +144,7 @@ int main()
     std::array<mugfx_draw_binding, 2> bindings {
         mugfx_draw_binding {
             .type = MUGFX_BINDING_TYPE_UNIFORM_DATA,
-            .uniform_data = { .id = vs_uniform_data },
+            .uniform_data = { .binding = 0, .id = vs_uniform_data },
         },
         mugfx_draw_binding {
             .type = MUGFX_BINDING_TYPE_TEXTURE,
@@ -154,6 +154,39 @@ int main()
 
     mugfx_set_viewport(0, 0, 1024, 768);
 
+#ifdef __EMSCRIPTEN__
+    // Emscripten does not give you a mainloop, but you have to set a mainloop callback
+
+    struct RenderContext {
+        Window& window;
+        mugfx_material_id material;
+        mugfx_geometry_id geometry;
+        mugfx_draw_binding* draw_bindings;
+        size_t num_draw_bindings;
+    };
+
+    RenderContext ctx { window, material, geometry, bindings.data(), bindings.size() };
+
+    auto main_loop = [](void* arg) {
+        auto& ctx = *static_cast<RenderContext*>(arg);
+
+        if (!ctx.window.poll_events()) {
+            emscripten_cancel_main_loop();
+            return;
+        }
+
+        mugfx_begin_frame();
+        mugfx_begin_pass(MUGFX_RENDER_TARGET_BACKBUFFER);
+        mugfx_clear(
+            MUGFX_CLEAR_COLOR_DEPTH, { .color = { 0.0f, 0.0f, 0.0f, 1.0f }, .depth = 1.0f });
+        mugfx_draw(ctx.material, ctx.geometry, ctx.draw_bindings, ctx.num_draw_bindings);
+        mugfx_end_pass();
+        mugfx_end_frame();
+        ctx.window.swap();
+    };
+
+    emscripten_set_main_loop_arg(main_loop, &ctx, 0, 1);
+#else
     while (window.poll_events()) {
         mugfx_begin_frame();
         mugfx_begin_pass(MUGFX_RENDER_TARGET_BACKBUFFER);
@@ -164,6 +197,7 @@ int main()
         mugfx_end_frame();
         window.swap();
     }
+#endif
 
     mugfx_shutdown();
 }

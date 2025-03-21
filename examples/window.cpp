@@ -12,9 +12,15 @@ struct Window::Impl {
             return false;
         }
 
+#ifdef MUGFX_WEBGL
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#else
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#endif
 
         SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
         SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
@@ -25,7 +31,7 @@ struct Window::Impl {
 
         SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 0);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(MUGFX_WEBGL)
         int contextFlags = 0;
         SDL_GL_GetAttribute(SDL_GL_CONTEXT_FLAGS, &contextFlags);
         contextFlags |= SDL_GL_CONTEXT_DEBUG_FLAG;

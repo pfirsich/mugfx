@@ -57,6 +57,8 @@ typedef struct {
     size_t max_num_pipelines; // default: 1024
 #ifdef MUGFX_OPENGL
     // We don't need anything here. Just create a context and make it current
+#elif MUGFX_WEBGL
+    // nothing needed here either
 #elif MUGFX_VULKAN
     const void* device; // VkDevice
     const void* swapchain; // VkSwapchainKHR
@@ -100,6 +102,7 @@ typedef enum {
     MUGFX_SHADER_STAGE_DEFAULT = 0,
     MUGFX_SHADER_STAGE_VERTEX,
     MUGFX_SHADER_STAGE_FRAGMENT,
+    // There are no compute shaders in WebGL
 } mugfx_shader_stage;
 
 typedef enum {
@@ -237,12 +240,17 @@ typedef enum {
     MUGFX_BLEND_FUNC_ONE_MINUS_DST_ALPHA,
 } mugfx_blend_func;
 
+// Of course this library is meant to abstract graphics libraries, so it makes no sense to expose
+// different functionality for different backends, but polygon modes are mostly used for debugging,
+// which happens on desktop platforms, so I make an exception here.
+#ifndef MUGFX_WEBGL
 typedef enum {
     MUGFX_POLYGON_MODE_DEFAULT = 0,
     MUGFX_POLYGON_MODE_FILL,
     MUGFX_POLYGON_MODE_LINE,
     MUGFX_POLYGON_MODE_POINT,
 } mugfx_polygon_mode;
+#endif
 
 typedef enum {
     MUGFX_STENCIL_FUNC_DEFAULT = 0,
@@ -265,7 +273,9 @@ typedef struct {
     mugfx_blend_func src_blend; // default: ONE
     mugfx_blend_func dst_blend; // default: ZERO
     float blend_color[4];
+#ifndef MUGFX_WEBGL
     mugfx_polygon_mode polygon_mode; // default: FILL
+#endif
     bool stencil_enable;
     mugfx_stencil_func stencil_func; // default: ALWAYS
     int stencil_ref;

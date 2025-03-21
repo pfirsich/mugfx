@@ -2,8 +2,15 @@
 #include <cassert>
 #include <memory>
 #include <optional>
+#include <string_view>
 
+using namespace std::string_view_literals;
+
+#ifdef MUGFX_WEBGL
+#include <GLES3/gl3.h>
+#else
 #include "glad/include/glad/gl.h"
+#endif
 
 #include "../shared.hpp"
 
@@ -335,6 +342,7 @@ static std::optional<GLenum> gl_blend_func(mugfx_blend_func func)
     }
 }
 
+#ifndef MUGFX_WEBGL
 static std::optional<GLenum> gl_polygon_mode(mugfx_polygon_mode mode)
 {
     switch (mode) {
@@ -348,6 +356,7 @@ static std::optional<GLenum> gl_polygon_mode(mugfx_polygon_mode mode)
         return std::nullopt;
     }
 }
+#endif
 
 static std::optional<GLenum> gl_stencil_func(mugfx_stencil_func func)
 {
@@ -539,7 +548,9 @@ struct Material {
     GLenum src_blend;
     GLenum dst_blend;
     std::array<float, 4> blend_color;
+#ifndef MUGFX_WEBGL
     GLenum polygon_mode;
+#endif
     bool stencil_enable;
     GLenum stencil_func;
     int stencil_ref;
@@ -593,7 +604,9 @@ static Pass& get_current_pass()
 EXPORT void mugfx_init(mugfx_init_params params)
 {
     common_init(params);
+#ifndef MUGFX_WEBGL
     gladLoaderLoadGL();
+#endif
     get_pool<Shader>(params.max_num_shaders);
     get_pool<Texture>(params.max_num_textures);
     get_pool<Material>(params.max_num_materials);
@@ -657,6 +670,36 @@ EXPORT const char* mugfx_get_api_version()
     return reinterpret_cast<const char*>(version);
 }
 
+static std::string_view get_preamble(mugfx_shader_stage stage)
+{
+    switch (stage) {
+#ifdef MUGFX_OPENGL
+    case MUGFX_SHADER_STAGE_VERTEX:
+        return "#version 420 core"sv;
+    case MUGFX_SHADER_STAGE_FRAGMENT:
+        return "#version 420 core"sv;
+#elif MUGFX_WEBGL
+    case MUGFX_SHADER_STAGE_VERTEX:
+        return "#version 300 es"sv;
+    case MUGFX_SHADER_STAGE_FRAGMENT:
+        // The precision qualifier is inserted, because I think this is almost always what you want.
+        // mediump is not enough for even basic lighting, but some platforms (old phones) simply
+        // don't support highp. It's likely not even that easy to find hardware to test this on.
+        return R"(#version 300 es
+
+precision mediump float;
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+)";
+#endif
+    default:
+        return ""sv;
+    }
+}
+
 EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
 {
     default_init(params);
@@ -673,7 +716,21 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
         return { 0 };
     }
 
-    glShaderSource(shader, 1, &params.source, NULL);
+    // The preamble including the version directives and mandatory precision qualifiers in the
+    // vertex shader for WebGL are inserted by mugfx, because it knows best which API and which
+    // version is used.
+    const auto preamble = get_preamble(params.stage);
+
+    std::array<const GLchar*, 2> sources = {
+        preamble.data(),
+        params.source,
+    };
+    std::array<GLint, 2> lengths = {
+        static_cast<GLint>(preamble.size()),
+        static_cast<GLint>(std::strlen(params.source)),
+    };
+
+    glShaderSource(shader, sources.size(), sources.data(), lengths.data());
     if (const auto error = glGetError()) {
         log_error("Error in glShaderSource: %s", gl_error_string(error));
         glDeleteShader(shader);
@@ -913,11 +970,13 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
         return { 0 };
     }
 
+#ifndef MUGFX_WEBGL
     const auto polygon_mode = gl_polygon_mode(params.polygon_mode);
     if (!polygon_mode) {
         log_error("Invalid polygon mode: %d", params.polygon_mode);
         return { 0 };
     }
+#endif
 
     const auto stencil_func = gl_stencil_func(params.stencil_func);
     if (!stencil_func) {
@@ -994,7 +1053,9 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
         .src_blend = *src_blend,
         .dst_blend = *dst_blend,
         .blend_color = {},
+#ifndef MUGFX_WEBGL
         .polygon_mode = *polygon_mode,
+#endif
         .stencil_enable = params.stencil_enable,
         .stencil_func = *stencil_func,
         .stencil_ref = params.stencil_ref,

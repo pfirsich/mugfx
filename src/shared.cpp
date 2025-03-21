@@ -187,7 +187,9 @@ void default_init(mugfx_material_create_params& params)
     set_default(params.cull_face, MUGFX_CULL_FACE_MODE_NONE);
     set_default(params.src_blend, MUGFX_BLEND_FUNC_ONE);
     set_default(params.dst_blend, MUGFX_BLEND_FUNC_ZERO);
+#ifndef MUGFX_WEBGL
     set_default(params.polygon_mode, MUGFX_POLYGON_MODE_FILL);
+#endif
     set_default(params.stencil_func, MUGFX_STENCIL_FUNC_ALWAYS);
 }
 

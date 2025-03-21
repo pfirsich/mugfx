@@ -65,6 +65,28 @@ I don't even if Vulkan is really necessary, because right now OpenGL ES works on
 I tried to design this API so it can work with Vulkan later, but I don't have much experience with Vulkan.
 Vulkan is an interesting target, because its so close to the other APIs one might need to support (Direct3D 12, Metal, WebGPU, NVN, GNM) and it is lower overhead and is more flexible. In the future OpenGL will probably not just be on the way out, but actually out and I think Vulkan will stay relevant a bit longer. Lots of development effort nowadays is focused on Vulkan too. And [MoltenVK](https://github.com/KhronosGroup/MoltenVK) is probably faster and more robust than Zink/ANGLE.
 
+## Building
+
+You shouldn't need any dependencies beyond CMake, build-essentials and a C++20 compiler. Then do the usual dance:
+
+```bash
+cmake -B build/ .
+cmake --build build/
+```
+
+### Emscripten
+
+Make sure Emscripten is installed and it's in your PATH (note to self: use `source "emsdk/emsdk_env.fish"`) then do a slightly different dance:
+
+```bash
+emcmake cmake -B build_webgl/ . # I recommend a separate build directory
+cmake --build build_webgl/
+```
+
+## Integration
+
+Just `add_subdirectory` this project with CMake and link against the `mugfx` target. If you want to see an example on how to use this with Emscripten, look at [hello_triangle](examples/CMakeLists.txt).
+
 ## Alternatives
 
 * [sokol_gfx](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): too low-level. I feel like I need to know the low-level APIs to use it.
