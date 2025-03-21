@@ -559,7 +559,7 @@ struct UniformData {
     mugfx_uniform_data_usage_hint usage;
     mugfx_buffer_id buffer = {};
     mugfx_range buffer_range = {};
-    std::byte* cpu_buffer = nullptr;
+    void* cpu_buffer = nullptr;
     bool cpu_buffer_owned = false;
     bool dirty = false;
 };
@@ -1149,9 +1149,9 @@ EXPORT mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create
         return { 0 };
     }
 
-    std::byte* cpu_buffer = reinterpret_cast<std::byte*>(params.cpu_buffer);
+    void* cpu_buffer = reinterpret_cast<std::byte*>(params.cpu_buffer);
     if (!cpu_buffer) {
-        cpu_buffer = new std::byte[params.size];
+        cpu_buffer = allocate(params.size);
         std::memset(cpu_buffer, 0, params.size);
     }
 
@@ -1196,7 +1196,7 @@ EXPORT void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data_id)
         return;
     }
     if (udata->cpu_buffer_owned) {
-        delete[] udata->cpu_buffer;
+        deallocate(udata->cpu_buffer, udata->buffer_range.length);
     }
     get_pool<UniformData>().remove(uniform_data_id.id);
 }
