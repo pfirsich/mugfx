@@ -157,6 +157,8 @@ int main()
     while (window.poll_events()) {
         mugfx_begin_frame();
         mugfx_begin_pass(MUGFX_RENDER_TARGET_BACKBUFFER);
+        mugfx_clear(
+            MUGFX_CLEAR_COLOR_DEPTH, { .color = { 0.0f, 0.0f, 0.0f, 1.0f }, .depth = 1.0f });
         mugfx_draw(material, geometry, bindings.data(), bindings.size());
         mugfx_end_pass();
         mugfx_end_frame();
