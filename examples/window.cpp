@@ -8,7 +8,7 @@ struct Window::Impl {
     bool init(const char* title, size_t width, size_t height)
     {
         if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) {
-            std::printf("Could not initialize SDL2");
+            std::printf("Could not initialize SDL2\n");
             return false;
         }
 
@@ -37,14 +37,14 @@ struct Window::Impl {
         window = SDL_CreateWindow(
             title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, flags);
         if (!window) {
-            std::printf("Could not create window");
+            std::printf("Could not create window\n");
             return false;
         }
 
         // Context
         ctx = SDL_GL_CreateContext(window);
         if (!ctx) {
-            std::printf("Could not create context");
+            std::printf("Could not create context\n");
             return false;
         }
 
