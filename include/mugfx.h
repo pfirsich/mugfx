@@ -310,7 +310,9 @@ typedef struct {
     uint32_t id;
 } mugfx_uniform_data_id;
 
-// This gives a hint on what this data is used for. I.e. once per frame, or once per draw
+// This gives a hint on how often this data is changed, i.e. never, per frame or per draw.
+// If you have uniform data objects for each object in your scene, the example data
+// listed for USAGE_HINT_DRAW is actually USAGE_HINT_FRAME.
 typedef enum {
     MUGFX_UNIFORM_DATA_USAGE_HINT_DEFAULT = 0,
     MUGFX_UNIFORM_DATA_USAGE_HINT_CONSTANT, // e.g. screen dimensions, camera projection, ...
@@ -330,6 +332,7 @@ typedef struct {
 // buffers (or a slice of one).
 mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create_params params);
 // This function marks the uniform data as dirty, assuming this pointer is used to modify it
+// The data should be in std140 layout!
 void* mugfx_uniform_data_get_ptr(mugfx_uniform_data_id uniform_data);
 // If you passed cpu_buffer, this will mark the data dirty and schedule an update of the GPU buffer
 void mugfx_uniform_data_update(mugfx_uniform_data_id uniform_data);
@@ -453,7 +456,7 @@ typedef struct {
         } buffer;
 
         struct {
-            uint32_t binding;
+            uint32_t binding; // OpenGL: Texture Unit
             mugfx_texture_id id;
         } texture;
     };
