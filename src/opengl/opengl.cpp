@@ -544,8 +544,8 @@ struct Material {
     GLenum stencil_func;
     int stencil_ref;
     uint32_t stencil_mask;
-    std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> frag_bindings;
-    std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> vert_bindings;
+    std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> frag_bindings = {};
+    std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> vert_bindings = {};
 };
 
 struct Buffer {
@@ -726,7 +726,7 @@ EXPORT mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader_id, 
         return {};
     }
     if (idx >= MUGFX_MAX_SHADER_BINDINGS) {
-        return { .type = MUGFX_SHADER_BINDING_TYPE_NONE };
+        return {};
     }
     return shader->bindings[idx];
 }
