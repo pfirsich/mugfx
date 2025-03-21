@@ -688,20 +688,22 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
     GLint log_length = 0;
     glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_length);
 
-    std::unique_ptr<char> info_log;
+    char* info_log = nullptr;
     if (log_length > 0) {
-        info_log.reset(reinterpret_cast<char*>(allocate(log_length)));
-        glGetShaderInfoLog(shader, log_length, NULL, info_log.get());
+        info_log = reinterpret_cast<char*>(allocate(log_length));
+        glGetShaderInfoLog(shader, log_length, NULL, info_log);
     }
 
     if (!compile_status) {
-        log_error("Shader compilation failed: %s", info_log.get());
+        log_error("Shader compilation failed: %s", info_log);
+        deallocate(info_log, log_length);
         glDeleteShader(shader);
         return { 0 };
     }
 
     if (info_log) {
-        log_warn("Shader compilation log: %s", info_log.get());
+        log_warn("Shader compilation log: %s", info_log);
+        deallocate(info_log, log_length);
     }
 
     Shader pool_shader {
@@ -962,22 +964,24 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
     GLint log_length = 0;
     glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &log_length);
 
-    std::unique_ptr<char> info_log;
+    char* info_log = nullptr;
     if (log_length > 0) {
-        info_log.reset(reinterpret_cast<char*>(allocate(log_length)));
-        glGetProgramInfoLog(prog, log_length, nullptr, info_log.get());
+        info_log = reinterpret_cast<char*>(allocate(log_length));
+        glGetProgramInfoLog(prog, log_length, nullptr, info_log);
     }
 
     GLint linkStatus = 0;
     glGetProgramiv(prog, GL_LINK_STATUS, &linkStatus);
     if (linkStatus == GL_FALSE) {
-        log_error("Linking shader failed: %s", info_log.get());
+        log_error("Linking shader failed: %s", info_log);
+        deallocate(info_log, log_length);
         glDeleteProgram(prog);
         return { 0 };
     }
 
     if (info_log) {
-        log_warn("Shader link log: %s", info_log.get());
+        log_warn("Shader link log (%d): %s", log_length, info_log);
+        deallocate(info_log, log_length);
     }
 
     Material mat {
