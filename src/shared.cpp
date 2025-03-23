@@ -20,15 +20,25 @@ const char* mugfx_severity_to_string(mugfx_severity severity)
 }
 
 namespace {
+void default_logging_callback(mugfx_severity severity, const char* msg)
+{
+    std::printf("[%s] %s\n", mugfx_severity_to_string(severity), msg);
+}
+
+void default_panic_handler(const char*)
+{
+    std::abort();
+}
+
 mugfx_logging_callback& get_logging_callback()
 {
-    static mugfx_logging_callback callback = nullptr;
+    static mugfx_logging_callback callback = default_logging_callback;
     return callback;
 }
 
 mugfx_panic_handler& get_panic_handler()
 {
-    static mugfx_panic_handler handler = nullptr;
+    static mugfx_panic_handler handler = default_panic_handler;
     return handler;
 }
 
@@ -93,14 +103,14 @@ void deallocate(void* ptr, size_t size)
 
 void log(mugfx_severity severity, const char* msg)
 {
-    const auto panic_handler = get_panic_handler();
-    if (severity >= MUGFX_SEVERITY_ERROR && panic_handler) {
-        panic_handler(msg);
-        std::abort();
-    }
     const auto logging_callback = get_logging_callback();
     if (logging_callback) {
         logging_callback(severity, msg);
+    }
+
+    const auto panic_handler = get_panic_handler();
+    if (severity >= MUGFX_SEVERITY_ERROR && panic_handler) {
+        panic_handler(msg);
     }
 }
 
@@ -146,8 +156,12 @@ void log_error(const char* fmt, ...)
 void common_init(mugfx_init_params& params)
 {
     default_init(params);
-    get_logging_callback() = params.logging_callback;
-    get_panic_handler() = params.panic_handler;
+    if (params.logging_callback) {
+        get_logging_callback() = params.logging_callback;
+    }
+    if (params.panic_handler) {
+        get_panic_handler() = params.panic_handler;
+    }
     get_allocator() = params.allocator ? params.allocator : get_default_allocator();
 }
 

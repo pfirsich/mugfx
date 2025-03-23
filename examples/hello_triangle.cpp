@@ -43,24 +43,11 @@ const auto frag_source = R"(
     }
 )";
 
-void logger(mugfx_severity severity, const char* msg)
-{
-    std::printf("[%s] %s\n", mugfx_severity_to_string(severity), msg);
-}
-
-void panic_handler(const char* msg)
-{
-    logger(MUGFX_SEVERITY_ERROR, msg);
-    std::abort();
-}
-
 int main()
 {
     auto window = Window::create("Hello Triangle", 1024, 768);
 
     mugfx_init({
-        .logging_callback = logger,
-        .panic_handler = panic_handler,
         .debug = true,
     });
 
