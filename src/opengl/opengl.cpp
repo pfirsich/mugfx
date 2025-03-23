@@ -1253,7 +1253,8 @@ EXPORT mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create
         .buffer = buffer_id,
         .buffer_range = buffer_range,
         .cpu_buffer = cpu_buffer,
-        .cpu_buffer_owned = params.cpu_buffer != nullptr,
+        // If no buffer was given, mugfx owns the buffer
+        .cpu_buffer_owned = !params.cpu_buffer,
     };
 
     const auto key = get_pool<UniformData>().insert(std::move(ub));
