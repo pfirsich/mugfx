@@ -53,18 +53,34 @@ static std::optional<GLenum> gl_shader_type(mugfx_shader_stage stage)
 static std::optional<GLenum> gl_pixel_format(mugfx_pixel_format format)
 {
     switch (format) {
+    case MUGFX_PIXEL_FORMAT_R8:
+        return GL_R8;
+    case MUGFX_PIXEL_FORMAT_RG8:
+        return GL_RG8;
     case MUGFX_PIXEL_FORMAT_RGB8:
         return GL_RGB8;
     case MUGFX_PIXEL_FORMAT_RGBA8:
         return GL_RGBA8;
+    case MUGFX_PIXEL_FORMAT_R16F:
+        return GL_R16F;
+    case MUGFX_PIXEL_FORMAT_RG16F:
+        return GL_RG16F;
     case MUGFX_PIXEL_FORMAT_RGB16F:
         return GL_RGB16F;
     case MUGFX_PIXEL_FORMAT_RGBA16F:
         return GL_RGBA16F;
+    case MUGFX_PIXEL_FORMAT_R32F:
+        return GL_R32F;
+    case MUGFX_PIXEL_FORMAT_RG32F:
+        return GL_RG32F;
     case MUGFX_PIXEL_FORMAT_RGB32F:
         return GL_RGB32F;
     case MUGFX_PIXEL_FORMAT_RGBA32F:
         return GL_RGBA32F;
+    case MUGFX_PIXEL_FORMAT_SRGB8:
+        return GL_SRGB8;
+    case MUGFX_PIXEL_FORMAT_SRGB8_ALPHA8:
+        return GL_SRGB8_ALPHA8;
     case MUGFX_PIXEL_FORMAT_DEPTH24:
         return GL_DEPTH_COMPONENT24;
     case MUGFX_PIXEL_FORMAT_DEPTH32F:
@@ -84,18 +100,34 @@ struct DataFormat {
 static std::optional<DataFormat> gl_data_format(mugfx_pixel_format format)
 {
     switch (format) {
+    case MUGFX_PIXEL_FORMAT_R8:
+        return DataFormat { GL_RED, GL_UNSIGNED_BYTE };
+    case MUGFX_PIXEL_FORMAT_RG8:
+        return DataFormat { GL_RG, GL_UNSIGNED_BYTE };
     case MUGFX_PIXEL_FORMAT_RGB8:
         return DataFormat { GL_RGB, GL_UNSIGNED_BYTE };
     case MUGFX_PIXEL_FORMAT_RGBA8:
         return DataFormat { GL_RGBA, GL_UNSIGNED_BYTE };
+    case MUGFX_PIXEL_FORMAT_R16F:
+        return DataFormat { GL_RED, GL_HALF_FLOAT };
+    case MUGFX_PIXEL_FORMAT_RG16F:
+        return DataFormat { GL_RG, GL_HALF_FLOAT };
     case MUGFX_PIXEL_FORMAT_RGB16F:
         return DataFormat { GL_RGB, GL_HALF_FLOAT };
     case MUGFX_PIXEL_FORMAT_RGBA16F:
         return DataFormat { GL_RGBA, GL_HALF_FLOAT };
+    case MUGFX_PIXEL_FORMAT_R32F:
+        return DataFormat { GL_RED, GL_FLOAT };
+    case MUGFX_PIXEL_FORMAT_RG32F:
+        return DataFormat { GL_RG, GL_FLOAT };
     case MUGFX_PIXEL_FORMAT_RGB32F:
         return DataFormat { GL_RGB, GL_FLOAT };
     case MUGFX_PIXEL_FORMAT_RGBA32F:
         return DataFormat { GL_RGBA, GL_FLOAT };
+    case MUGFX_PIXEL_FORMAT_SRGB8:
+        return DataFormat { GL_RGB, GL_UNSIGNED_BYTE }; // NOTE: Same as RGB8
+    case MUGFX_PIXEL_FORMAT_SRGB8_ALPHA8:
+        return DataFormat { GL_RGBA, GL_UNSIGNED_BYTE }; // NOTE: Same as RGBA8
     case MUGFX_PIXEL_FORMAT_DEPTH24:
         return DataFormat { GL_DEPTH_COMPONENT, GL_UNSIGNED_INT };
     case MUGFX_PIXEL_FORMAT_DEPTH32F:
