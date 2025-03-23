@@ -15,11 +15,11 @@ endif()
 set_property(CACHE MUGFX_BACKEND PROPERTY STRINGS ${MUGFX_BACKEND_OPTIONS})
 message(STATUS "Building with backend: ${MUGFX_BACKEND}")
 
-include(wall)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/wall.cmake)
 
 option(MUGFX_ENABLE_ASAN "Enable ASan" OFF)
 if (MUGFX_ENABLE_ASAN AND NOT EMSCRIPTEN)
-  include(asan)
+  include(${CMAKE_CURRENT_LIST_DIR}/cmake/asan.cmake)
 endif()
 
 set(MUGFX_SRC "src/shared.cpp")
