@@ -1543,7 +1543,7 @@ EXPORT void mugfx_begin_pass(mugfx_render_target_id target)
     pass.target = target;
 }
 
-void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values)
+EXPORT void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values)
 {
     GLenum gl_mask = 0;
     if (mask & MUGFX_CLEAR_COLOR) {
