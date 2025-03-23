@@ -305,6 +305,49 @@ static std::optional<GLenum> gl_depth_func(mugfx_depth_func func)
     }
 }
 
+static void set_enabled(GLenum cap, bool value)
+{
+    if (value) {
+        glEnable(cap);
+    } else {
+        glDisable(cap);
+    }
+}
+
+static bool set_depth(GLenum depth_func, bool depth_write)
+{
+    static bool current_enabled = false;
+    static GLenum current_func = GL_LESS;
+    static bool current_write = true;
+
+    const auto enabled = depth_func == GL_ALWAYS && !depth_write;
+    if (current_enabled != enabled) {
+        set_enabled(GL_DEPTH_TEST, enabled);
+        current_enabled = enabled;
+    }
+
+    if (!enabled) {
+        // Ignore the rest of the state
+        return true;
+    }
+
+    if (current_func != depth_func) {
+        glDepthFunc(depth_func);
+        if (const auto error = glGetError()) {
+            log_error("Error in glDepthFunc: %s", gl_error_string(error));
+            return false;
+        }
+        current_func = depth_func;
+    }
+
+    if (current_write != depth_write) {
+        glDepthMask(depth_write ? GL_TRUE : GL_FALSE);
+        current_write = depth_write;
+    }
+
+    return true;
+}
+
 struct WriteMask {
     bool r;
     bool g;
@@ -330,6 +373,22 @@ static std::optional<WriteMask> gl_write_mask(mugfx_write_mask mask)
     };
 }
 
+static void set_color_write_mask(const WriteMask& m)
+{
+    static bool current_r = true;
+    static bool current_g = true;
+    static bool current_b = true;
+    static bool current_a = true;
+
+    if (m.r != current_r || m.g != current_g || m.b != current_b || m.a != current_a) {
+        glColorMask(m.r, m.g, m.b, m.a);
+        current_r = m.r;
+        current_g = m.g;
+        current_b = m.b;
+        current_a = m.a;
+    }
+}
+
 static std::optional<GLenum> gl_cull_face_mode(mugfx_cull_face_mode mode)
 {
     switch (mode) {
@@ -343,6 +402,21 @@ static std::optional<GLenum> gl_cull_face_mode(mugfx_cull_face_mode mode)
         return GL_FRONT_AND_BACK;
     default:
         return std::nullopt;
+    }
+}
+
+static void set_cull_face(GLenum cull_face)
+{
+    static GLenum current_cull_face = GL_NONE;
+
+    if (current_cull_face != cull_face) {
+        if (cull_face == GL_NONE) {
+            glDisable(GL_CULL_FACE);
+        } else {
+            glEnable(GL_CULL_FACE);
+            glCullFace(cull_face);
+        }
+        current_cull_face = cull_face;
     }
 }
 
@@ -374,6 +448,37 @@ static std::optional<GLenum> gl_blend_func(mugfx_blend_func func)
     }
 }
 
+static void set_blend_mode(GLenum src, GLenum dst, float color[4])
+{
+    static bool current_enabled = false;
+    static GLenum current_src = GL_ONE;
+    static GLenum current_dst = GL_ZERO;
+    static float current_color[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    const auto blend_enabled = src == GL_ONE && dst == GL_ZERO;
+
+    if (current_enabled != blend_enabled) {
+        set_enabled(GL_BLEND, blend_enabled);
+        current_enabled = blend_enabled;
+    }
+
+    if (!blend_enabled) {
+        // Ignore the rest of the state
+        return;
+    }
+
+    if (current_src != src || current_dst != dst) {
+        glBlendFunc(src, dst);
+        current_src = src;
+        current_dst = dst;
+    }
+
+    if (std::memcmp(current_color, color, sizeof(float) * 4)) {
+        glBlendColor(color[0], color[1], color[2], color[3]);
+        std::memcpy(current_color, color, sizeof(float) * 4);
+    }
+}
+
 #ifndef MUGFX_WEBGL
 static std::optional<GLenum> gl_polygon_mode(mugfx_polygon_mode mode)
 {
@@ -386,6 +491,16 @@ static std::optional<GLenum> gl_polygon_mode(mugfx_polygon_mode mode)
         return GL_POINT;
     default:
         return std::nullopt;
+    }
+}
+
+static void set_polygon_mode(GLenum mode)
+{
+    static GLenum current_mode = GL_FILL;
+
+    if (current_mode != mode) {
+        glPolygonMode(GL_FRONT_AND_BACK, mode);
+        current_mode = mode;
     }
 }
 #endif
@@ -411,6 +526,31 @@ static std::optional<GLenum> gl_stencil_func(mugfx_stencil_func func)
         return GL_ALWAYS;
     default:
         return std::nullopt;
+    }
+}
+
+static void set_stencil(bool enabled, GLenum func, int ref, uint32_t mask)
+{
+    static bool current_enabled = false;
+    static GLenum current_func = GL_ALWAYS;
+    static int current_ref = 0;
+    static uint32_t current_mask = 0xffff'ffff;
+
+    if (current_enabled != enabled) {
+        set_enabled(GL_STENCIL_TEST, enabled);
+        current_enabled = enabled;
+    }
+
+    if (!enabled) {
+        // Ignore the rest of the state
+        return;
+    }
+
+    if (current_func != func || current_ref != ref || current_mask != mask) {
+        glStencilFunc(func, ref, mask);
+        current_func = func;
+        current_ref = ref;
+        current_mask = mask;
     }
 }
 
@@ -1561,6 +1701,27 @@ EXPORT void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values)
     glClear(gl_mask);
 }
 
+static bool apply_material(Material* mat)
+{
+    if (!bind_shader(mat->shader_program)) {
+        return false;
+    }
+
+    if (!set_depth(mat->depth_func, mat->write_mask.depth)) {
+        return false;
+    }
+
+    set_color_write_mask(mat->write_mask);
+    set_cull_face(mat->cull_face);
+    set_blend_mode(mat->src_blend, mat->dst_blend, mat->blend_color.data());
+#ifndef MUGFX_WEBGL
+    set_polygon_mode(mat->polygon_mode);
+#endif
+    set_stencil(mat->stencil_enable, mat->stencil_func, mat->stencil_ref, mat->stencil_mask);
+
+    return true;
+}
+
 EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings)
 {
@@ -1581,7 +1742,7 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
         return;
     }
 
-    if (!bind_shader(mat->shader_program)) {
+    if (!apply_material(mat)) {
         return;
     }
 
