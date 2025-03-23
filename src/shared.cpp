@@ -184,7 +184,7 @@ void default_init(mugfx_material_create_params& params)
 {
     set_default(params.depth_func, MUGFX_DEPTH_FUNC_LEQUAL);
     set_default(params.write_mask, MUGFX_WRITE_MASK_RGBA | MUGFX_WRITE_MASK_DEPTH);
-    set_default(params.cull_face, MUGFX_CULL_FACE_MODE_NONE);
+    set_default(params.cull_face, MUGFX_CULL_FACE_MODE_BACK);
     set_default(params.src_blend, MUGFX_BLEND_FUNC_ONE);
     set_default(params.dst_blend, MUGFX_BLEND_FUNC_ZERO);
 #ifndef MUGFX_WEBGL

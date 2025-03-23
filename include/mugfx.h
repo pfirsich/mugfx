@@ -277,7 +277,7 @@ typedef struct {
     mugfx_shader_id frag_shader;
     mugfx_depth_func depth_func; // default: LEQUAL
     mugfx_write_mask write_mask; // default: RGBA | DEPTH
-    mugfx_cull_face_mode cull_face; // default: NONE
+    mugfx_cull_face_mode cull_face; // default: BACK
     mugfx_blend_func src_blend; // default: ONE
     mugfx_blend_func dst_blend; // default: ZERO
     float blend_color[4];
