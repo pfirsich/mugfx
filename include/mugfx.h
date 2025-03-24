@@ -490,10 +490,16 @@ typedef enum {
 } mugfx_clear_mask;
 
 typedef struct {
-    float color[4]; // default: {0.0f, 0.0f, 0.0f, 0.0f}
-    float depth; // default: 1.0f
-    int stencil; // default: 0
+    float color[4];
+    float depth;
+    int stencil;
 } mugfx_clear_values;
+
+#define MUGFX_CLEAR_DEFAULT                                                                        \
+    (mugfx_clear_values)                                                                           \
+    {                                                                                              \
+        .color = { 0.0f, 0.0f, 0.0f, 1.0f }, .depth = 1.0f, .stencil = 0,                          \
+    }
 
 void mugfx_begin_frame();
 void mugfx_begin_pass(mugfx_render_target_id target);
