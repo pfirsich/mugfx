@@ -320,7 +320,7 @@ static bool set_depth(GLenum depth_func, bool depth_write)
     static GLenum current_func = GL_LESS;
     static bool current_write = true;
 
-    const auto enabled = depth_func == GL_ALWAYS && !depth_write;
+    const auto enabled = depth_func != GL_ALWAYS || depth_write;
     if (current_enabled != enabled) {
         set_enabled(GL_DEPTH_TEST, enabled);
         current_enabled = enabled;
