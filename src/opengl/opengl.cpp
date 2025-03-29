@@ -847,12 +847,12 @@ static std::string_view get_preamble(mugfx_shader_stage stage)
     switch (stage) {
 #ifdef MUGFX_OPENGL
     case MUGFX_SHADER_STAGE_VERTEX:
-        return "#version 420 core\n"sv;
+        return "#version 420 core\n#line 1\n"sv;
     case MUGFX_SHADER_STAGE_FRAGMENT:
-        return "#version 420 core\n"sv;
+        return "#version 420 core\n#line 1\n"sv;
 #elif MUGFX_WEBGL
     case MUGFX_SHADER_STAGE_VERTEX:
-        return "#version 300 es\n"sv;
+        return "#version 300 es\n#line 1\n"sv;
     case MUGFX_SHADER_STAGE_FRAGMENT:
         // The precision qualifier is inserted, because I think this is almost always what you want.
         // mediump is not enough for even basic lighting, but some platforms (old phones) simply
@@ -865,6 +865,7 @@ precision highp float;
 #else
 precision mediump float;
 #endif
+#line 1
 )";
 #endif
     default:
