@@ -920,7 +920,7 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
 
     char* info_log = nullptr;
     if (log_length > 0) {
-        info_log = reinterpret_cast<char*>(allocate(log_length));
+        info_log = allocate<char>(log_length);
         glGetShaderInfoLog(shader, log_length, NULL, info_log);
     }
 
@@ -1198,7 +1198,7 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
 
     char* info_log = nullptr;
     if (log_length > 0) {
-        info_log = reinterpret_cast<char*>(allocate(log_length));
+        info_log = allocate<char>(log_length);
         glGetProgramInfoLog(prog, log_length, nullptr, info_log);
     }
 
@@ -1385,7 +1385,7 @@ EXPORT mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create
 
     void* cpu_buffer = reinterpret_cast<std::byte*>(params.cpu_buffer);
     if (!cpu_buffer) {
-        cpu_buffer = allocate(params.size);
+        cpu_buffer = allocate_raw(params.size);
         std::memset(cpu_buffer, 0, params.size);
     }
 
@@ -1431,7 +1431,7 @@ EXPORT void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data_id)
         return;
     }
     if (udata->cpu_buffer_owned) {
-        deallocate(udata->cpu_buffer, udata->buffer_range.length);
+        deallocate_raw(udata->cpu_buffer, udata->buffer_range.length);
     }
     get_pool<UniformData>().remove(uniform_data_id.id);
 }

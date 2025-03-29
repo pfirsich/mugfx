@@ -13,9 +13,27 @@
 
 #define EXPORT extern "C"
 
-void* allocate(size_t size);
-void* reallocate(void* ptr, size_t old_size, size_t new_size);
-void deallocate(void* ptr, size_t size);
+void* allocate_raw(size_t size);
+void deallocate_raw(void* ptr, size_t size);
+
+template <typename T>
+T* allocate(size_t num)
+{
+    auto ptr = reinterpret_cast<T*>(allocate_raw(sizeof(T) * num));
+    for (size_t i = 0; i < num; ++i) {
+        new (ptr + i) T {};
+    }
+    return ptr;
+}
+
+template <typename T>
+void deallocate(T* ptr, size_t num)
+{
+    for (size_t i = 0; i < num; ++i) {
+        ptr[i].~T();
+    }
+    deallocate_raw(ptr, sizeof(T) * num);
+}
 
 #ifdef __GNUC__
 #define PRINTFLIKE(n, m) __attribute__((format(printf, n, m)))
@@ -44,37 +62,37 @@ template <typename T>
 struct Pool {
     static_assert(sizeof(T) >= sizeof(uint16_t));
 
-    Pool(size_t size)
-        : data_(reinterpret_cast<T*>(allocate(sizeof(T) * size)))
-        , ids_(reinterpret_cast<Id*>(allocate(sizeof(Id) * size)))
-        , size_(size)
+    Pool(size_t capacity)
+        : data_(reinterpret_cast<T*>(allocate_raw(sizeof(T) * capacity)))
+        , ids_(allocate<Id>(capacity))
+        , capacity_(capacity)
     {
-        assert(size > 0 && size < 0xffff);
-        for (size_t i = 0; i < size; ++i) {
+        assert(capacity > 0 && capacity < 0xffff);
+
+        for (size_t i = 0; i < capacity; ++i) {
             store_free_list(i, i + 1);
             // We invalidate on removal and we want to start with generation 1, so we init with 1
-            new (ids_ + i) Id { EmptyIndex, 1 };
+            ids_[i] = Id { EmptyIndex, 1 };
         }
     }
 
     ~Pool()
     {
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < capacity_; ++i) {
             if (ids_[i].idx != EmptyIndex) {
                 destroy_value(i);
             } else {
                 destroy_free_list(i);
             }
-            ids_[i].~Id();
         }
-        deallocate(data_, sizeof(T) * size_);
-        deallocate(ids_, sizeof(Id) * size_);
+        deallocate_raw(data_, sizeof(T) * capacity_);
+        deallocate(ids_, capacity_);
     }
 
     uint32_t insert(T&& v)
     {
         const auto idx = free_list_head_;
-        assert(idx < size_);
+        assert(idx < capacity_);
         assert(ids_[idx].idx == EmptyIndex);
         free_list_head_ = get_free_list(idx);
         destroy_free_list(idx);
@@ -85,13 +103,13 @@ struct Pool {
 
     uint32_t get_key(size_t idx)
     {
-        return idx < size_ && ids_[idx].idx == idx ? ids_[idx].combine() : 0;
+        return idx < capacity_ && ids_[idx].idx == idx ? ids_[idx].combine() : 0;
     }
 
     bool contains(uint32_t key)
     {
         const auto id = Id(key);
-        return id.idx < size_ && ids_[id.idx].gen == id.gen;
+        return id.idx < capacity_ && ids_[id.idx].gen == id.gen;
     }
 
     bool remove(uint32_t key)
@@ -109,7 +127,7 @@ struct Pool {
 
     T* get(uint32_t key) { return contains(key) ? data_ + Id(key).idx : nullptr; }
 
-    size_t capacity() const { return size_; }
+    size_t capacity() const { return capacity_; }
 
 private:
     static constexpr size_t EmptyIndex = 0xFFFF;
@@ -118,6 +136,7 @@ private:
         uint16_t idx;
         uint16_t gen;
 
+        Id() : idx(0), gen(0) { }
         Id(uint32_t id) : idx(id & 0xFFFF), gen(id >> 16) { }
         Id(uint16_t idx, uint16_t gen) : idx(idx), gen(gen) { }
         uint32_t combine() const { return gen << 16 | idx; }
@@ -129,9 +148,9 @@ private:
     void store_value(size_t idx, T&& v) { new (data_ + idx) T { std::move(v) }; }
     void destroy_value(size_t idx) { (data_ + idx)->~T(); }
 
-    T* data_;
-    Id* ids_;
-    size_t size_;
+    T* data_ = nullptr;
+    Id* ids_ = nullptr;
+    size_t capacity_ = 0;
     size_t free_list_head_ = 0;
 };
 

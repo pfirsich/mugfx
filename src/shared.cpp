@@ -3,7 +3,59 @@
 #include <array>
 #include <cstdio>
 
-const char* mugfx_severity_to_string(mugfx_severity severity)
+static void* default_allocate(size_t size, void*)
+{
+    return std::malloc(size);
+}
+
+static void* default_reallocate(void* ptr, size_t, size_t new_size, void*)
+{
+    return std::realloc(ptr, new_size);
+}
+
+static void default_deallocate(void* ptr, size_t, void*)
+{
+    return std::free(ptr);
+}
+
+static void default_logging_callback(mugfx_severity severity, const char* msg)
+{
+    std::printf("[%s] %s\n", mugfx_severity_to_string(severity), msg);
+}
+
+static void default_panic_handler(const char*)
+{
+    std::abort();
+}
+
+struct SharedState {
+    mugfx_allocator alloc;
+    mugfx_logging_callback logging_callback;
+    mugfx_panic_handler panic_handler;
+};
+
+static SharedState shared_state = {
+    .alloc = {
+        .allocate = default_allocate,
+        .reallocate = default_reallocate,
+        .deallocate = default_deallocate,
+        .ctx = nullptr,
+    },
+    .logging_callback = default_logging_callback,
+    .panic_handler = default_panic_handler,
+};
+
+void* allocate_raw(size_t size)
+{
+    return shared_state.alloc.allocate(size, shared_state.alloc.ctx);
+}
+
+void deallocate_raw(void* ptr, size_t size)
+{
+    shared_state.alloc.deallocate(ptr, size, shared_state.alloc.ctx);
+}
+
+EXPORT const char* mugfx_severity_to_string(mugfx_severity severity)
 {
     switch (severity) {
     case MUGFX_SEVERITY_DEBUG:
@@ -19,98 +71,14 @@ const char* mugfx_severity_to_string(mugfx_severity severity)
     }
 }
 
-namespace {
-void default_logging_callback(mugfx_severity severity, const char* msg)
-{
-    std::printf("[%s] %s\n", mugfx_severity_to_string(severity), msg);
-}
-
-void default_panic_handler(const char*)
-{
-    std::abort();
-}
-
-mugfx_logging_callback& get_logging_callback()
-{
-    static mugfx_logging_callback callback = default_logging_callback;
-    return callback;
-}
-
-mugfx_panic_handler& get_panic_handler()
-{
-    static mugfx_panic_handler handler = default_panic_handler;
-    return handler;
-}
-
-void* default_allocate(size_t size, void*)
-{
-    return std::malloc(size);
-}
-
-void* default_reallocate(void* ptr, size_t, size_t new_size, void*)
-{
-    return std::realloc(ptr, new_size);
-}
-
-void default_deallocate(void* ptr, size_t, void*)
-{
-    return std::free(ptr);
-}
-
-mugfx_allocator* get_default_allocator()
-{
-    static mugfx_allocator allocator {
-        .allocate = default_allocate,
-        .reallocate = default_reallocate,
-        .deallocate = default_deallocate,
-        .ctx = nullptr,
-    };
-    return &allocator;
-}
-
-mugfx_allocator*& get_allocator()
-{
-    static mugfx_allocator* allocator = nullptr;
-    return allocator;
-}
-
-template <typename T, typename U>
-void set_default(T& v, U default_value)
-{
-    if (v == T {}) {
-        v = static_cast<T>(default_value);
-    }
-}
-}
-
-void* allocate(size_t size)
-{
-    assert(get_allocator());
-    return get_allocator()->allocate(size, get_allocator()->ctx);
-}
-
-void* reallocate(void* ptr, size_t old_size, size_t new_size)
-{
-    assert(get_allocator());
-    return get_allocator()->reallocate(ptr, old_size, new_size, get_allocator()->ctx);
-}
-
-void deallocate(void* ptr, size_t size)
-{
-    assert(get_allocator());
-    get_allocator()->deallocate(ptr, size, get_allocator()->ctx);
-}
-
 void log(mugfx_severity severity, const char* msg)
 {
-    const auto logging_callback = get_logging_callback();
-    if (logging_callback) {
-        logging_callback(severity, msg);
+    if (shared_state.logging_callback) {
+        shared_state.logging_callback(severity, msg);
     }
 
-    const auto panic_handler = get_panic_handler();
-    if (severity >= MUGFX_SEVERITY_ERROR && panic_handler) {
-        panic_handler(msg);
+    if (severity >= MUGFX_SEVERITY_ERROR && shared_state.panic_handler) {
+        shared_state.panic_handler(msg);
     }
 }
 
@@ -156,20 +124,27 @@ void log_error(const char* fmt, ...)
 void common_init(mugfx_init_params& params)
 {
     default_init(params);
+    if (params.allocator) {
+        shared_state.alloc = *params.allocator;
+    }
     if (params.logging_callback) {
-        get_logging_callback() = params.logging_callback;
+        shared_state.logging_callback = params.logging_callback;
     }
     if (params.panic_handler) {
-        get_panic_handler() = params.panic_handler;
+        shared_state.panic_handler = params.panic_handler;
     }
-    get_allocator() = params.allocator ? params.allocator : get_default_allocator();
+}
+
+template <typename T, typename U>
+static void set_default(T& v, U default_value)
+{
+    if (v == T {}) {
+        v = static_cast<T>(default_value);
+    }
 }
 
 void default_init(mugfx_init_params& params)
 {
-    if (!params.allocator) {
-        params.allocator = get_default_allocator();
-    }
     set_default(params.max_num_shaders, 64);
     set_default(params.max_num_textures, 128);
     set_default(params.max_num_uniforms, 1024);
