@@ -755,23 +755,22 @@ struct Geometry {
     GLsizei index_count;
 };
 
-template <typename T>
-static Pool<T>& get_pool(size_t size = 0)
-{
-    static Pool<T> pool(size);
-    return pool;
-}
-
 struct Pass {
-    mugfx_render_target_id target;
+    mugfx_render_target_id target = { 0 };
     bool in_pass = false;
 };
 
-static Pass& get_current_pass()
-{
-    static Pass pass;
-    return pass;
-}
+struct State {
+    Pool<Shader> shaders;
+    Pool<Texture> textures;
+    Pool<Material> materials;
+    Pool<Buffer> buffers;
+    Pool<UniformData> uniform_data;
+    Pool<Geometry> geometries;
+    Pass current_pass;
+};
+
+State* state = nullptr;
 
 EXPORT void mugfx_init(mugfx_init_params params)
 {
@@ -779,18 +778,19 @@ EXPORT void mugfx_init(mugfx_init_params params)
 #ifndef MUGFX_WEBGL
     gladLoaderLoadGL();
 #endif
-    get_pool<Shader>(params.max_num_shaders);
-    get_pool<Texture>(params.max_num_textures);
-    get_pool<Material>(params.max_num_materials);
-    get_pool<Buffer>(params.max_num_buffers);
-    get_pool<UniformData>(params.max_num_uniforms);
-    get_pool<Geometry>(params.max_num_geometries);
+    assert(!state);
+    state = allocate<State>(1);
+    state->shaders.init(params.max_num_shaders);
+    state->textures.init(params.max_num_textures);
+    state->materials.init(params.max_num_materials);
+    state->buffers.init(params.max_num_buffers);
+    state->uniform_data.init(params.max_num_uniforms);
+    state->geometries.init(params.max_num_geometries);
 }
 
 template <typename T, typename DestroyFunc>
-static void destroy_all(DestroyFunc destroy)
+static void destroy_all(Pool<T>& pool, DestroyFunc destroy)
 {
-    auto& pool = get_pool<T>();
     for (size_t i = 0; i < pool.capacity(); ++i) {
         const auto key = pool.get_key(i);
         if (key) {
@@ -801,15 +801,17 @@ static void destroy_all(DestroyFunc destroy)
 
 EXPORT void mugfx_shutdown()
 {
-    destroy_all<Shader>(mugfx_shader_destroy);
-    destroy_all<Texture>(mugfx_texture_destroy);
-    destroy_all<Material>(mugfx_material_destroy);
-    destroy_all<Buffer>(mugfx_buffer_destroy);
-    destroy_all<UniformData>(mugfx_uniform_data_destroy);
-    destroy_all<Geometry>(mugfx_geometry_destroy);
+    assert(state);
+    destroy_all(state->shaders, mugfx_shader_destroy);
+    destroy_all(state->textures, mugfx_texture_destroy);
+    destroy_all(state->materials, mugfx_material_destroy);
+    destroy_all(state->buffers, mugfx_buffer_destroy);
+    destroy_all(state->uniform_data, mugfx_uniform_data_destroy);
+    destroy_all(state->geometries, mugfx_geometry_destroy);
 #ifndef MUGFX_WEBGL
     gladLoaderUnloadGL();
 #endif
+    deallocate(state, 1);
 }
 
 EXPORT const char* mugfx_get_renderer_name()
@@ -944,13 +946,13 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
     std::memcpy(&pool_shader.bindings[0], &params.bindings[0],
         sizeof(mugfx_shader_binding) * MUGFX_MAX_SHADER_BINDINGS);
 
-    const auto key = get_pool<Shader>().insert(std::move(pool_shader));
+    const auto key = state->shaders.insert(std::move(pool_shader));
     return { key };
 }
 
 EXPORT mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader_id, size_t idx)
 {
-    const auto shader = get_pool<Shader>().get(shader_id.id);
+    const auto shader = state->shaders.get(shader_id.id);
     if (!shader) {
         log_error("Shader ID %u does not exist", shader_id.id);
         return {};
@@ -963,7 +965,7 @@ EXPORT mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader_id, 
 
 EXPORT void mugfx_shader_destroy(mugfx_shader_id shader_id)
 {
-    const auto shader = get_pool<Shader>().get(shader_id.id);
+    const auto shader = state->shaders.get(shader_id.id);
     if (!shader) {
         log_error("Shader ID %u does not exist", shader_id.id);
         return;
@@ -974,7 +976,7 @@ EXPORT void mugfx_shader_destroy(mugfx_shader_id shader_id)
         log_error("Failed to delete shader %u: %s", shader_id.id, gl_error_string(error));
     }
 
-    get_pool<Shader>().remove(shader_id.id);
+    state->shaders.remove(shader_id.id);
 }
 
 EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
@@ -1061,7 +1063,7 @@ EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
         }
     }
 
-    const auto key = get_pool<Texture>().insert(Texture {
+    const auto key = state->textures.insert(Texture {
         .target = target,
         .texture = texture,
         .width = params.width,
@@ -1073,7 +1075,7 @@ EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
 EXPORT void mugfx_texture_set_data(
     mugfx_texture_id texture, mugfx_slice data, mugfx_pixel_format data_format)
 {
-    const auto tex = get_pool<Texture>().get(texture.id);
+    const auto tex = state->textures.get(texture.id);
     if (!tex) {
         log_error("Texture ID %u does not exist", texture.id);
         return;
@@ -1095,7 +1097,7 @@ EXPORT void mugfx_texture_set_data(
 
 EXPORT void mugfx_texture_destroy(mugfx_texture_id texture)
 {
-    const auto tex = get_pool<Texture>().get(texture.id);
+    const auto tex = state->textures.get(texture.id);
     if (!tex) {
         log_error("Texture ID %u does not exist", texture.id);
         return;
@@ -1106,7 +1108,7 @@ EXPORT void mugfx_texture_destroy(mugfx_texture_id texture)
         log_error("Error destroying texture ID %d: %s", texture.id, gl_error_string(error));
     }
 
-    get_pool<Texture>().remove(texture.id);
+    state->textures.remove(texture.id);
 }
 
 EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params params)
@@ -1163,13 +1165,13 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
         return { 0 };
     }
 
-    const auto vert = get_pool<Shader>().get(params.vert_shader.id);
+    const auto vert = state->shaders.get(params.vert_shader.id);
     if (!vert) {
         log_error("Shader ID %u does not exist", params.vert_shader.id);
         return { 0 };
     }
 
-    const auto frag = get_pool<Shader>().get(params.frag_shader.id);
+    const auto frag = state->shaders.get(params.frag_shader.id);
     if (!frag) {
         log_error("Shader ID %u does not exist", params.frag_shader.id);
         return { 0 };
@@ -1240,13 +1242,13 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
     std::memcpy(mat.vert_bindings.data(), vert->bindings.data(),
         MUGFX_MAX_SHADER_BINDINGS * sizeof(mugfx_shader_binding));
 
-    const auto key = get_pool<Material>().insert(std::move(mat));
+    const auto key = state->materials.insert(std::move(mat));
     return { key };
 }
 
 EXPORT void mugfx_material_destroy(mugfx_material_id material)
 {
-    const auto mat = get_pool<Material>().get(material.id);
+    const auto mat = state->materials.get(material.id);
     if (!mat) {
         log_error("Material ID %u does not exist", material.id);
         return;
@@ -1257,7 +1259,7 @@ EXPORT void mugfx_material_destroy(mugfx_material_id material)
         log_error("Error destroying material ID %d: %s", material.id, gl_error_string(error));
     }
 
-    get_pool<Material>().remove(material.id);
+    state->materials.remove(material.id);
 }
 
 EXPORT mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params)
@@ -1293,7 +1295,7 @@ EXPORT mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params)
         return { 0 };
     }
 
-    const auto key = get_pool<Buffer>().insert(Buffer {
+    const auto key = state->buffers.insert(Buffer {
         .target = *target,
         .buffer = buffer,
         .size = params.data.length,
@@ -1305,7 +1307,7 @@ EXPORT mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params)
 
 EXPORT void mugfx_buffer_update(mugfx_buffer_id buffer, size_t offset, mugfx_slice data)
 {
-    const auto buf = get_pool<Buffer>().get(buffer.id);
+    const auto buf = state->buffers.get(buffer.id);
     if (!buf) {
         log_error("Buffer ID %u does not exist", buffer.id);
         return;
@@ -1332,7 +1334,7 @@ EXPORT void mugfx_buffer_update(mugfx_buffer_id buffer, size_t offset, mugfx_sli
 
 EXPORT void mugfx_buffer_destroy(mugfx_buffer_id buffer)
 {
-    const auto buf = get_pool<Buffer>().get(buffer.id);
+    const auto buf = state->buffers.get(buffer.id);
     if (!buf) {
         log_error("Buffer ID %u does not exist", buffer.id);
         return;
@@ -1343,7 +1345,7 @@ EXPORT void mugfx_buffer_destroy(mugfx_buffer_id buffer)
         log_error("Error destroying buffer ID %d: %s", buffer.id, gl_error_string(error));
     }
 
-    get_pool<Buffer>().remove(buffer.id);
+    state->buffers.remove(buffer.id);
 }
 
 static mugfx_buffer_usage_hint get_buffer_usage(mugfx_uniform_data_usage_hint usage)
@@ -1377,13 +1379,13 @@ EXPORT mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create
     });
     const mugfx_range buffer_range = { .offset = 0, .length = params.size };
 
-    auto buffer = get_pool<Buffer>().get(buffer_id.id);
+    auto buffer = state->buffers.get(buffer_id.id);
     if (!buffer) {
         log_error("Buffer ID %u does not exist", buffer_id.id);
         return { 0 };
     }
 
-    void* cpu_buffer = reinterpret_cast<std::byte*>(params.cpu_buffer);
+    void* cpu_buffer = params.cpu_buffer;
     if (!cpu_buffer) {
         cpu_buffer = allocate_raw(params.size);
         std::memset(cpu_buffer, 0, params.size);
@@ -1398,13 +1400,13 @@ EXPORT mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create
         .cpu_buffer_owned = !params.cpu_buffer,
     };
 
-    const auto key = get_pool<UniformData>().insert(std::move(ub));
+    const auto key = state->uniform_data.insert(std::move(ub));
     return { key };
 }
 
 EXPORT void* mugfx_uniform_data_get_ptr(mugfx_uniform_data_id uniform_data_id)
 {
-    const auto udata = get_pool<UniformData>().get(uniform_data_id.id);
+    const auto udata = state->uniform_data.get(uniform_data_id.id);
     if (!udata) {
         log_error("Uniform data ID %u does not exist", uniform_data_id.id);
         return nullptr;
@@ -1415,7 +1417,7 @@ EXPORT void* mugfx_uniform_data_get_ptr(mugfx_uniform_data_id uniform_data_id)
 
 EXPORT void mugfx_uniform_data_update(mugfx_uniform_data_id uniform_data_id)
 {
-    const auto udata = get_pool<UniformData>().get(uniform_data_id.id);
+    const auto udata = state->uniform_data.get(uniform_data_id.id);
     if (!udata) {
         log_error("Uniform data ID %u does not exist", uniform_data_id.id);
         return;
@@ -1425,7 +1427,7 @@ EXPORT void mugfx_uniform_data_update(mugfx_uniform_data_id uniform_data_id)
 
 EXPORT void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data_id)
 {
-    const auto udata = get_pool<UniformData>().get(uniform_data_id.id);
+    const auto udata = state->uniform_data.get(uniform_data_id.id);
     if (!udata) {
         log_error("Uniform data ID %u does not exist", uniform_data_id.id);
         return;
@@ -1433,7 +1435,7 @@ EXPORT void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data_id)
     if (udata->cpu_buffer_owned) {
         deallocate_raw(udata->cpu_buffer, udata->buffer_range.length);
     }
-    get_pool<UniformData>().remove(uniform_data_id.id);
+    state->uniform_data.remove(uniform_data_id.id);
 }
 
 static bool update_uniform_data(UniformData* udata, Buffer* buffer)
@@ -1490,7 +1492,7 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         if (!buf.buffer.id) {
             break;
         }
-        vbufs[b] = get_pool<Buffer>().get(buf.buffer.id);
+        vbufs[b] = state->buffers.get(buf.buffer.id);
         if (!vbufs[b]) {
             log_error("Vertex buffer ID %u does not exist", buf.buffer.id);
             return { 0 };
@@ -1551,7 +1553,7 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         }
         geom.index_type = *index_type;
 
-        ibuf = get_pool<Buffer>().get(params.index_buffer.id);
+        ibuf = state->buffers.get(params.index_buffer.id);
         if (!ibuf) {
             log_error("Index buffer ID %u does not exist", params.index_buffer.id);
             return { 0 };
@@ -1625,13 +1627,13 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
 
     glBindVertexArray(0);
 
-    const auto key = get_pool<Geometry>().insert(std::move(geom));
+    const auto key = state->geometries.insert(std::move(geom));
     return { key };
 }
 
 EXPORT void mugfx_geometry_destroy(mugfx_geometry_id geometry)
 {
-    const auto geom = get_pool<Geometry>().get(geometry.id);
+    const auto geom = state->geometries.get(geometry.id);
     if (!geom) {
         log_error("Geometry ID %u does not exist", geometry.id);
         return;
@@ -1642,7 +1644,7 @@ EXPORT void mugfx_geometry_destroy(mugfx_geometry_id geometry)
         log_error("Error in glDeleteVertexArrays: %s", gl_error_string(error));
     }
 
-    get_pool<Geometry>().remove(geometry.id);
+    state->geometries.remove(geometry.id);
 }
 
 EXPORT mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_create_params params)
@@ -1675,13 +1677,12 @@ EXPORT void mugfx_begin_frame() { }
 
 EXPORT void mugfx_begin_pass(mugfx_render_target_id target)
 {
-    auto& pass = get_current_pass();
-    if (pass.in_pass) {
+    if (state->current_pass.in_pass) {
         log_error("Cannot begin another pass");
         return;
     }
-    pass.in_pass = true;
-    pass.target = target;
+    state->current_pass.in_pass = true;
+    state->current_pass.target = target;
 }
 
 EXPORT void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values)
@@ -1726,18 +1727,18 @@ static bool apply_material(Material* mat)
 EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings)
 {
-    if (!get_current_pass().in_pass) {
+    if (!state->current_pass.in_pass) {
         log_error("Cannot draw outside a pass");
         return;
     }
 
-    const auto mat = get_pool<Material>().get(material.id);
+    const auto mat = state->materials.get(material.id);
     if (!mat) {
         log_error("Material ID %u does not exist", material.id);
         return;
     }
 
-    const auto geom = get_pool<Geometry>().get(geometry.id);
+    const auto geom = state->geometries.get(geometry.id);
     if (!geom) {
         log_error("Geometry ID %u does not exist", geometry.id);
         return;
@@ -1749,13 +1750,13 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
 
     for (size_t i = 0; i < num_bindings; ++i) {
         if (bindings[i].type == MUGFX_BINDING_TYPE_UNIFORM_DATA) {
-            const auto udata = get_pool<UniformData>().get(bindings[i].uniform_data.id.id);
+            const auto udata = state->uniform_data.get(bindings[i].uniform_data.id.id);
             if (!udata) {
                 log_error("Uniform data ID %u does not exist", bindings[i].uniform_data.id.id);
                 return;
             }
 
-            const auto buffer = get_pool<Buffer>().get(udata->buffer.id);
+            const auto buffer = state->buffers.get(udata->buffer.id);
             assert(buffer);
             if (!buffer) {
                 log_error("Buffer ID %u does not exist", udata->buffer.id);
@@ -1773,7 +1774,7 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
                 return;
             }
         } else if (bindings[i].type == MUGFX_BINDING_TYPE_TEXTURE) {
-            const auto tex = get_pool<Texture>().get(bindings[i].texture.id.id);
+            const auto tex = state->textures.get(bindings[i].texture.id.id);
             if (!tex) {
                 log_error("Texture ID %u does not exist", bindings[i].texture.id.id);
                 return;
@@ -1782,7 +1783,7 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
                 return;
             }
         } else if (bindings[i].type == MUGFX_BINDING_TYPE_BUFFER) {
-            const auto buffer = get_pool<Buffer>().get(bindings[i].buffer.id.id);
+            const auto buffer = state->buffers.get(bindings[i].buffer.id.id);
             if (!buffer) {
                 log_error("Buffer ID %u does not exist", bindings[i].buffer.id.id);
                 return;
@@ -1815,18 +1816,17 @@ EXPORT void mugfx_flush() { }
 
 EXPORT void mugfx_end_pass()
 {
-    auto& pass = get_current_pass();
-    if (!pass.in_pass) {
+    if (!state->current_pass.in_pass) {
         log_error("Cannot end a pass outside a pass");
         return;
     }
-    pass.in_pass = false;
+    state->current_pass.in_pass = false;
     mugfx_flush();
 }
 
 EXPORT void mugfx_end_frame()
 {
-    if (get_current_pass().in_pass) {
+    if (state->current_pass.in_pass) {
         log_error("Cannot end frame in a pass");
         return;
     }

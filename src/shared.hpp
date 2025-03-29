@@ -62,13 +62,12 @@ template <typename T>
 struct Pool {
     static_assert(sizeof(T) >= sizeof(uint16_t));
 
-    Pool(size_t capacity)
-        : data_(reinterpret_cast<T*>(allocate_raw(sizeof(T) * capacity)))
-        , ids_(allocate<Id>(capacity))
-        , capacity_(capacity)
+    void init(size_t capacity)
     {
         assert(capacity > 0 && capacity < 0xffff);
-
+        data_ = reinterpret_cast<T*>(allocate_raw(sizeof(T) * capacity));
+        ids_ = allocate<Id>(capacity);
+        capacity_ = capacity;
         for (size_t i = 0; i < capacity; ++i) {
             store_free_list(i, i + 1);
             // We invalidate on removal and we want to start with generation 1, so we init with 1
