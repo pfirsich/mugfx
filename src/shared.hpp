@@ -11,6 +11,8 @@
 
 #include "mugfx.h"
 
+namespace mugfx {
+
 #define EXPORT extern "C"
 
 void* allocate_raw(size_t size);
@@ -204,3 +206,5 @@ private:
     std::array<char, Size> data_;
     size_t size_ = 0;
 };
+
+}

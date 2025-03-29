@@ -3,6 +3,8 @@
 #include <array>
 #include <cstdio>
 
+namespace mugfx {
+
 static void* default_allocate(size_t size, void*)
 {
     return std::malloc(size);
@@ -202,4 +204,6 @@ void default_init(mugfx_render_target_create_params& params)
 {
     set_default(params.color_formats[0], MUGFX_PIXEL_FORMAT_RGBA8);
     set_default(params.depth_format, MUGFX_PIXEL_FORMAT_DEPTH24);
+}
+
 }

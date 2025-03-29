@@ -14,6 +14,8 @@ using namespace std::string_view_literals;
 
 #include "../shared.hpp"
 
+namespace mugfx {
+
 static const char* gl_error_string(GLenum error)
 {
     switch (error) {
@@ -1831,4 +1833,6 @@ EXPORT void mugfx_end_frame()
         return;
     }
     mugfx_flush();
+}
+
 }
