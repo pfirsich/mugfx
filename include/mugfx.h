@@ -420,6 +420,8 @@ typedef struct {
 
 // This represents the vertex input state of the pipeline
 mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params params);
+void mugfx_geometry_set_vertex_range(mugfx_geometry_id geometry, size_t offset, size_t count);
+void mugfx_geometry_set_index_range(mugfx_geometry_id geometry, size_t offset, size_t count);
 void mugfx_geometry_destroy(mugfx_geometry_id geometry);
 
 // Render Target

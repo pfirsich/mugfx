@@ -759,8 +759,12 @@ struct Geometry {
     GLenum draw_mode;
     GLuint vao;
     GLenum index_type;
+    GLsizei vertex_offset;
     GLsizei vertex_count;
+    GLsizei max_vertex_count;
+    GLsizei index_offset;
     GLsizei index_count;
+    GLsizei max_index_count;
 };
 
 struct Pass {
@@ -1486,8 +1490,12 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         .draw_mode = *draw_mode,
         .vao = 0,
         .index_type = 0,
+        .vertex_offset = 0,
         .vertex_count = static_cast<GLsizei>(params.vertex_count),
+        .max_vertex_count = static_cast<GLsizei>(params.vertex_count),
+        .index_offset = 0,
         .index_count = static_cast<GLsizei>(params.index_count),
+        .max_index_count = static_cast<GLsizei>(params.vertex_count),
     };
 
     struct Attribute {
@@ -1552,15 +1560,20 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
 
         // TODO: Check divisability
         const auto vertex_count = static_cast<GLsizei>(vbufs[b]->size / vfmt[b].stride);
-        if (!geom.vertex_count) {
-            geom.vertex_count = vertex_count;
+        if (!geom.max_vertex_count) {
+            geom.max_vertex_count = vertex_count;
+        } else {
+            geom.max_vertex_count = std::min(geom.max_vertex_count, vertex_count);
         }
         if (geom.vertex_count > vertex_count) {
-            log_error(
-                "Geometry vertex_count (%u) exceeds vertex count of buffer with index %lu (%u)",
-                geom.vertex_count, b, vertex_count);
+            log_error("Geometry vertex_count (%u) exceeds max vertex count of buffers (%u)",
+                geom.vertex_count, vertex_count);
             return { 0 };
         }
+    }
+
+    if (!geom.vertex_count) {
+        geom.vertex_count = geom.max_vertex_count;
     }
 
     const Buffer* ibuf = nullptr;
@@ -1582,11 +1595,14 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         assert(index_size);
 
         const auto index_count = static_cast<GLsizei>(ibuf->size / *index_size);
+        if (!geom.max_index_count) {
+            geom.max_index_count = index_count;
+        }
         if (!geom.index_count) {
             geom.index_count = index_count;
         }
         if (geom.index_count > index_count) {
-            log_error("Geometry index count (%u) exceeds size of index buffer (%u)",
+            log_error("Geometry index_count (%u) exceeds max index count of index buffer (%u)",
                 geom.index_count, index_count);
             return { 0 };
         }
@@ -1650,6 +1666,21 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
 
     const auto key = state->geometries.insert(std::move(geom));
     return { key };
+}
+
+EXPORT void mugfx_geometry_set_vertex_range(mugfx_geometry_id geometry, size_t offset, size_t count)
+{
+    const auto geom = state->geometries.get(geometry.id);
+    geom->vertex_offset = offset;
+    geom->vertex_count = count;
+}
+
+EXPORT void mugfx_geometry_set_index_range(mugfx_geometry_id geometry, size_t offset, size_t count)
+{
+    const auto geom = state->geometries.get(geometry.id);
+    assert(geom->index_type > 0);
+    geom->index_offset = offset * get_index_size(geom->index_type).value();
+    geom->index_count = count;
 }
 
 EXPORT void mugfx_geometry_destroy(mugfx_geometry_id geometry)
@@ -1820,9 +1851,10 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
         return;
     }
     if (geom->index_type) {
-        glDrawElements(geom->draw_mode, geom->index_count, geom->index_type, 0);
+        glDrawElements(geom->draw_mode, geom->index_count, geom->index_type,
+            (const void*)(uintptr_t)geom->index_offset);
     } else {
-        glDrawArrays(geom->draw_mode, 0, geom->vertex_count);
+        glDrawArrays(geom->draw_mode, geom->vertex_offset, geom->vertex_count);
     }
     bind_vao(0);
 }
