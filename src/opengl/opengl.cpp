@@ -1097,6 +1097,17 @@ EXPORT void mugfx_texture_set_data(
         tex->target, 0, 0, 0, tex->width, tex->height, df->format, df->data_type, data.data);
 }
 
+EXPORT void mugfx_texture_get_size(mugfx_texture_id texture, uint32_t* width, uint32_t* height)
+{
+    const auto tex = state->textures.get(texture.id);
+    if (!tex) {
+        log_error("Texture ID %u does not exist", texture.id);
+        return;
+    }
+    *width = (uint32_t)tex->width;
+    *height = (uint32_t)tex->height;
+}
+
 EXPORT void mugfx_texture_destroy(mugfx_texture_id texture)
 {
     const auto tex = state->textures.get(texture.id);

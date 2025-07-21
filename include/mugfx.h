@@ -196,6 +196,7 @@ typedef struct {
 mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params);
 void mugfx_texture_set_data(
     mugfx_texture_id texture, mugfx_slice data, mugfx_pixel_format data_format);
+void mugfx_texture_get_size(mugfx_texture_id texture, uint32_t* width, uint32_t* height);
 void mugfx_texture_destroy(mugfx_texture_id texture);
 
 // Material (maps to Pipeline in Vulkan)
