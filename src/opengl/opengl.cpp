@@ -1344,8 +1344,7 @@ EXPORT void mugfx_buffer_update(mugfx_buffer_id buffer, size_t offset, mugfx_sli
             log_error("Error in glBufferData: %s", gl_error_string(error));
         }
     } else {
-        const auto length = std::min(offset + data.length, buf->size) - offset;
-        glBufferSubData(buf->target, offset, length, data.data);
+        glBufferSubData(buf->target, offset, data.length, data.data);
         if (const auto error = glGetError()) {
             log_error("Error in glBufferSubData: %s", gl_error_string(error));
         }
