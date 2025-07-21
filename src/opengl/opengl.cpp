@@ -254,16 +254,22 @@ static size_t get_buffer_target_index(GLenum target)
     }
 }
 
+static bool bind_buffer_nocache(GLenum target, GLuint buffer)
+{
+    glBindBuffer(target, buffer);
+    if (const auto error = glGetError()) {
+        log_error("Error in glBindBuffer: %s", gl_error_string(error));
+        return false;
+    }
+    return true;
+}
+
 static bool bind_buffer(GLenum target, GLuint buffer)
 {
     static std::array<GLuint, 3> current_buffers = {};
     auto& current_buffer = current_buffers.at(get_buffer_target_index(target));
     if (current_buffer != buffer) {
-        glBindBuffer(target, buffer);
-        if (const auto error = glGetError()) {
-            log_error("Error in glBindBuffer: %s", gl_error_string(error));
-            return false;
-        }
+        bind_buffer_nocache(target, buffer);
         current_buffer = buffer;
     }
     return true;
@@ -1298,6 +1304,7 @@ EXPORT mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params)
     GLuint buffer;
     // Errors: number of buffers is negative
     glGenBuffers(1, &buffer);
+    assert(buffer != 0);
 
     // Errors: target is invalid, buffer is not a buffer
     bind_buffer(*target, buffer);
@@ -1599,7 +1606,9 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         if (!vbufs[b]) {
             break;
         }
-        if (!bind_buffer(GL_ARRAY_BUFFER, vbufs[b]->buffer)) {
+
+        // Let's not cache these, because the bindings are stored in the VAO
+        if (!bind_buffer_nocache(GL_ARRAY_BUFFER, vbufs[b]->buffer)) {
             glDeleteVertexArrays(1, &geom.vao);
             return { 0 };
         }
@@ -1632,7 +1641,7 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
 
     if (ibuf) {
         assert(geom.index_type);
-        if (!bind_buffer(GL_ELEMENT_ARRAY_BUFFER, ibuf->buffer)) {
+        if (!bind_buffer_nocache(GL_ELEMENT_ARRAY_BUFFER, ibuf->buffer)) {
             glDeleteVertexArrays(1, &geom.vao);
             return { 0 };
         }
