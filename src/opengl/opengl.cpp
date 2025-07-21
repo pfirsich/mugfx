@@ -463,7 +463,7 @@ static void set_blend_mode(GLenum src, GLenum dst, float color[4])
     static GLenum current_dst = GL_ZERO;
     static float current_color[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-    const auto blend_enabled = src == GL_ONE && dst == GL_ZERO;
+    const auto blend_enabled = src != GL_ONE || dst != GL_ZERO;
 
     if (current_enabled != blend_enabled) {
         set_enabled(GL_BLEND, blend_enabled);
