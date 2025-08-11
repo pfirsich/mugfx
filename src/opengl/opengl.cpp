@@ -1476,6 +1476,12 @@ static bool update_uniform_data(UniformData* udata, Buffer* buffer)
     return true;
 }
 
+static bool is_integer_attribute_type(GLenum t)
+{
+    return t == GL_BYTE || t == GL_UNSIGNED_BYTE || t == GL_SHORT || t == GL_UNSIGNED_SHORT
+        || t == GL_INT || t == GL_UNSIGNED_INT;
+}
+
 EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params params)
 {
     default_init(params);
@@ -1642,8 +1648,14 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
             }
             const auto offset
                 = reinterpret_cast<const GLvoid*>(vfmt[b].buffer_offset + attr.offset);
-            glVertexAttribPointer(
-                attr.location, attr.components, attr.type, attr.normalized, vfmt[b].stride, offset);
+
+            if (is_integer_attribute_type(attr.type) && !attr.normalized) {
+                glVertexAttribIPointer(
+                    attr.location, attr.components, attr.type, vfmt[b].stride, offset);
+            } else {
+                glVertexAttribPointer(attr.location, attr.components, attr.type, attr.normalized,
+                    vfmt[b].stride, offset);
+            }
             if (const auto error = glGetError()) {
                 log_error("Error in glVertexAttribPointer(%d, %d, %d, %d, %d, %p): %s",
                     attr.location, attr.components, attr.type, attr.normalized, vfmt[b].stride,
