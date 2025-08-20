@@ -459,23 +459,27 @@ typedef enum {
 } mugfx_binding_type;
 
 typedef struct {
+    uint32_t binding;
+    mugfx_uniform_data_id id;
+} mugfx_uniform_data_binding;
+
+typedef struct {
+    uint32_t binding;
+    mugfx_buffer_id id;
+    mugfx_range range;
+} mugfx_buffer_binding;
+
+typedef struct {
+    uint32_t binding; // OpenGL: Texture Unit
+    mugfx_texture_id id;
+} mugfx_texture_binding;
+
+typedef struct {
     mugfx_binding_type type;
     union {
-        struct {
-            uint32_t binding;
-            mugfx_uniform_data_id id;
-        } uniform_data;
-
-        struct {
-            uint32_t binding;
-            mugfx_buffer_id id;
-            mugfx_range range;
-        } buffer;
-
-        struct {
-            uint32_t binding; // OpenGL: Texture Unit
-            mugfx_texture_id id;
-        } texture;
+        mugfx_uniform_data_binding uniform_data;
+        mugfx_buffer_binding buffer;
+        mugfx_texture_binding texture;
     };
 } mugfx_draw_binding;
 
