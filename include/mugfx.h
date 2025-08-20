@@ -378,12 +378,20 @@ typedef enum {
     MUGFX_VERTEX_ATTRIBUTE_TYPE_U10_10_10_2_NORM,
 } mugfx_vertex_attribute_type;
 
+typedef enum {
+    // The vertex attribute advances for every vertex (divisor = 0)
+    MUGFX_VERTEX_ATTRIBUTE_RATE_VERTEX = 0,
+    // The vertex attribute advances for every instance (divisor = 1)
+    MUGFX_VERTEX_ATTRIBUTE_RATE_INSTANCE,
+} mugfx_vertex_attribute_rate;
+
 // Try to align each attribute to at least 4 bytes
 typedef struct {
     size_t location;
     size_t components;
     mugfx_vertex_attribute_type type;
     size_t offset;
+    mugfx_vertex_attribute_rate rate;
 } mugfx_vertex_attribute;
 
 typedef struct {

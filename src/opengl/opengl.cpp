@@ -1510,6 +1510,7 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         GLenum type;
         GLboolean normalized;
         size_t offset;
+        GLuint divisor;
     };
 
     struct VertexBufferFormat {
@@ -1560,6 +1561,7 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
             attr.type = type->type;
             attr.normalized = type->normalized;
             attr.offset = in_attr.offset ? in_attr.offset : offset;
+            attr.divisor = (GLuint)in_attr.rate;
             offset = attr.offset + get_attribute_size(in_attr.type, in_attr.components);
         }
         vfmt[b].stride = buf.stride ? buf.stride : offset;
@@ -1663,6 +1665,8 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
                 glDeleteVertexArrays(1, &geom.vao);
                 return { 0 };
             }
+
+            glVertexAttribDivisor(attr.location, attr.divisor);
         }
     }
 
