@@ -1792,8 +1792,65 @@ static bool apply_material(Material* mat)
     return true;
 }
 
+static bool apply_bindings(mugfx_draw_binding* bindings, size_t num_bindings)
+{
+    for (size_t i = 0; i < num_bindings; ++i) {
+        if (bindings[i].type == MUGFX_BINDING_TYPE_UNIFORM_DATA) {
+            const auto udata = state->uniform_data.get(bindings[i].uniform_data.id.id);
+            if (!udata) {
+                log_error("Uniform data ID %u does not exist", bindings[i].uniform_data.id.id);
+                return false;
+            }
+
+            const auto buffer = state->buffers.get(udata->buffer.id);
+            assert(buffer);
+            if (!buffer) {
+                log_error("Buffer ID %u does not exist", udata->buffer.id);
+                return false;
+            }
+
+            if (udata->dirty) {
+                if (!update_uniform_data(udata, buffer)) {
+                    return false;
+                }
+            }
+
+            if (!bind_buffer(buffer->target, buffer->buffer, bindings[i].uniform_data.binding,
+                    udata->buffer_range)) {
+                return false;
+            }
+        } else if (bindings[i].type == MUGFX_BINDING_TYPE_TEXTURE) {
+            const auto tex = state->textures.get(bindings[i].texture.id.id);
+            if (!tex) {
+                log_error("Texture ID %u does not exist", bindings[i].texture.id.id);
+                return false;
+            }
+            if (!bind_texture(bindings[i].texture.binding, tex->target, tex->texture)) {
+                return false;
+            }
+        } else if (bindings[i].type == MUGFX_BINDING_TYPE_BUFFER) {
+            const auto buffer = state->buffers.get(bindings[i].buffer.id.id);
+            if (!buffer) {
+                log_error("Buffer ID %u does not exist", bindings[i].buffer.id.id);
+                return false;
+            }
+            if (!bind_buffer(buffer->target, buffer->buffer, bindings[i].uniform_data.binding,
+                    bindings[i].buffer.range)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings)
+{
+    mugfx_draw_instanced(material, geometry, bindings, num_bindings, 0);
+}
+
+EXPORT void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id geometry,
+    mugfx_draw_binding* bindings, size_t num_bindings, size_t instance_count)
 {
     if (!state->current_pass.in_pass) {
         log_error("Cannot draw outside a pass");
@@ -1816,69 +1873,32 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
         return;
     }
 
-    for (size_t i = 0; i < num_bindings; ++i) {
-        if (bindings[i].type == MUGFX_BINDING_TYPE_UNIFORM_DATA) {
-            const auto udata = state->uniform_data.get(bindings[i].uniform_data.id.id);
-            if (!udata) {
-                log_error("Uniform data ID %u does not exist", bindings[i].uniform_data.id.id);
-                return;
-            }
-
-            const auto buffer = state->buffers.get(udata->buffer.id);
-            assert(buffer);
-            if (!buffer) {
-                log_error("Buffer ID %u does not exist", udata->buffer.id);
-                return;
-            }
-
-            if (udata->dirty) {
-                if (!update_uniform_data(udata, buffer)) {
-                    return;
-                }
-            }
-
-            if (!bind_buffer(buffer->target, buffer->buffer, bindings[i].uniform_data.binding,
-                    udata->buffer_range)) {
-                return;
-            }
-        } else if (bindings[i].type == MUGFX_BINDING_TYPE_TEXTURE) {
-            const auto tex = state->textures.get(bindings[i].texture.id.id);
-            if (!tex) {
-                log_error("Texture ID %u does not exist", bindings[i].texture.id.id);
-                return;
-            }
-            if (!bind_texture(bindings[i].texture.binding, tex->target, tex->texture)) {
-                return;
-            }
-        } else if (bindings[i].type == MUGFX_BINDING_TYPE_BUFFER) {
-            const auto buffer = state->buffers.get(bindings[i].buffer.id.id);
-            if (!buffer) {
-                log_error("Buffer ID %u does not exist", bindings[i].buffer.id.id);
-                return;
-            }
-            if (!bind_buffer(buffer->target, buffer->buffer, bindings[i].uniform_data.binding,
-                    bindings[i].buffer.range)) {
-                return;
-            }
-        }
+    if (!apply_bindings(bindings, num_bindings)) {
+        return;
     }
 
     if (!bind_vao(geom->vao)) {
         return;
     }
-    if (geom->index_type) {
-        glDrawElements(geom->draw_mode, geom->index_count, geom->index_type,
-            (const void*)(uintptr_t)geom->index_offset);
-    } else {
-        glDrawArrays(geom->draw_mode, geom->vertex_offset, geom->vertex_count);
-    }
-    bind_vao(0);
-}
 
-EXPORT void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id geometry,
-    mugfx_draw_binding* bindings, size_t num_bindings, size_t instance_count)
-{
-    log_error("mugfx_draw_instanced not implemented yet");
+    if (instance_count) {
+        if (geom->index_type) {
+            glDrawElementsInstanced(geom->draw_mode, geom->index_count, geom->index_type,
+                (const void*)(uintptr_t)geom->index_offset, (GLsizei)instance_count);
+        } else {
+            glDrawArraysInstanced(
+                geom->draw_mode, geom->vertex_offset, geom->vertex_count, (GLsizei)instance_count);
+        }
+    } else {
+        if (geom->index_type) {
+            glDrawElements(geom->draw_mode, geom->index_count, geom->index_type,
+                (const void*)(uintptr_t)geom->index_offset);
+        } else {
+            glDrawArrays(geom->draw_mode, geom->vertex_offset, geom->vertex_count);
+        }
+    }
+
+    bind_vao(0);
 }
 
 EXPORT void mugfx_flush() { }
