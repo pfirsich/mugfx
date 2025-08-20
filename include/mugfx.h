@@ -437,11 +437,7 @@ typedef struct {
     size_t samples;
 } mugfx_render_target_create_params;
 
-#define MUGFX_RENDER_TARGET_BACKBUFFER                                                             \
-    (mugfx_render_target_id)                                                                       \
-    {                                                                                              \
-        0                                                                                          \
-    }
+#define MUGFX_RENDER_TARGET_BACKBUFFER (mugfx_render_target_id) { 0 }
 
 mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_create_params params);
 void mugfx_render_target_blit_to_render_target(
@@ -499,10 +495,7 @@ typedef struct {
 } mugfx_clear_values;
 
 #define MUGFX_CLEAR_DEFAULT                                                                        \
-    (mugfx_clear_values)                                                                           \
-    {                                                                                              \
-        .color = { 0.0f, 0.0f, 0.0f, 1.0f }, .depth = 1.0f, .stencil = 0,                          \
-    }
+    (mugfx_clear_values) { .color = { 0.0f, 0.0f, 0.0f, 1.0f }, .depth = 1.0f, .stencil = 0 }
 
 void mugfx_begin_frame();
 void mugfx_begin_pass(mugfx_render_target_id target);
