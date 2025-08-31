@@ -187,31 +187,6 @@ static std::optional<GLenum> gl_mag_filter(mugfx_texture_mag_filter filter)
     }
 }
 
-static bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
-{
-    // TODO: Save this per target!
-    static std::array<GLuint, 64> current_texture_2d = {};
-    if (target == GL_TEXTURE_2D) {
-        if (unit >= current_texture_2d.size()) {
-            log_error("Texture unit must be in [0, %lu]", current_texture_2d.size());
-            return false;
-        }
-        if (texture != current_texture_2d[unit]) {
-            glActiveTexture(GL_TEXTURE0 + unit);
-            glBindTexture(target, texture);
-            if (const auto error = glGetError()) {
-                log_error("Error binding texture %d: %s", texture, gl_error_string(error));
-                return false;
-            }
-            current_texture_2d[unit] = texture;
-        }
-    } else {
-        log_error("Invalid texture target %d", target);
-        return false;
-    }
-    return true;
-}
-
 static std::optional<GLenum> gl_buffer_target(mugfx_buffer_target target)
 {
     switch (target) {
@@ -252,41 +227,6 @@ static size_t get_buffer_target_index(GLenum target)
     default:
         return 0xFF;
     }
-}
-
-static bool bind_buffer_nocache(GLenum target, GLuint buffer)
-{
-    glBindBuffer(target, buffer);
-    if (const auto error = glGetError()) {
-        log_error("Error in glBindBuffer: %s", gl_error_string(error));
-        return false;
-    }
-    return true;
-}
-
-static bool bind_buffer(GLenum target, GLuint buffer)
-{
-    static std::array<GLuint, 3> current_buffers = {};
-    auto& current_buffer = current_buffers.at(get_buffer_target_index(target));
-    if (current_buffer != buffer) {
-        bind_buffer_nocache(target, buffer);
-        current_buffer = buffer;
-    }
-    return true;
-}
-
-static bool bind_buffer(GLenum target, GLuint buffer, uint32_t binding, mugfx_range range)
-{
-    if (range.length) {
-        glBindBufferBase(target, binding, buffer);
-    } else {
-        glBindBufferRange(target, binding, buffer, range.offset, range.length);
-    }
-    if (const auto error = glGetError()) {
-        log_error("Error in glBindBufferBase/Range: %s", gl_error_string(error));
-        return false;
-    }
-    return true;
 }
 
 static std::optional<GLenum> gl_depth_func(mugfx_depth_func func)
@@ -562,20 +502,6 @@ static void set_stencil(bool enabled, GLenum func, int ref, uint32_t mask)
     }
 }
 
-static bool bind_shader(GLuint program)
-{
-    static GLuint current_program = 0;
-    if (current_program != program) {
-        glUseProgram(program);
-        if (const auto error = glGetError()) {
-            log_error("Error in glUseProgram: %s", gl_error_string(error));
-            return false;
-        }
-        current_program = program;
-    }
-    return true;
-}
-
 struct IndexType {
     GLenum type;
     GLboolean normalized;
@@ -716,6 +642,7 @@ struct Texture {
     GLuint texture;
     size_t width;
     size_t height;
+    uint64_t size_bytes;
 };
 
 struct Material {
@@ -780,9 +707,90 @@ struct State {
     Pool<UniformData> uniform_data;
     Pool<Geometry> geometries;
     Pass current_pass;
+    mugfx_frame_stats cur_stats = {}, last_stats = {};
+    mugfx_resource_stats res_stats = {};
+    GLuint frame_time_query = 0;
 };
 
 State* state = nullptr;
+
+static bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
+{
+    // TODO: Save this per target!
+    static std::array<GLuint, 64> current_texture_2d = {};
+    if (target == GL_TEXTURE_2D) {
+        if (unit >= current_texture_2d.size()) {
+            log_error("Texture unit must be in [0, %lu]", current_texture_2d.size());
+            return false;
+        }
+        if (texture != current_texture_2d[unit]) {
+            state->cur_stats.texture_binds++;
+            glActiveTexture(GL_TEXTURE0 + unit);
+            glBindTexture(target, texture);
+            if (const auto error = glGetError()) {
+                log_error("Error binding texture %d: %s", texture, gl_error_string(error));
+                return false;
+            }
+            current_texture_2d[unit] = texture;
+        }
+    } else {
+        log_error("Invalid texture target %d", target);
+        return false;
+    }
+    return true;
+}
+
+static bool bind_shader(GLuint program)
+{
+    static GLuint current_program = 0;
+    if (current_program != program) {
+        state->cur_stats.shader_switches++;
+        glUseProgram(program);
+        if (const auto error = glGetError()) {
+            log_error("Error in glUseProgram: %s", gl_error_string(error));
+            return false;
+        }
+        current_program = program;
+    }
+    return true;
+}
+
+static bool bind_buffer_nocache(GLenum target, GLuint buffer)
+{
+    state->cur_stats.buffer_binds++;
+    glBindBuffer(target, buffer);
+    if (const auto error = glGetError()) {
+        log_error("Error in glBindBuffer: %s", gl_error_string(error));
+        return false;
+    }
+    return true;
+}
+
+static bool bind_buffer(GLenum target, GLuint buffer)
+{
+    static std::array<GLuint, 3> current_buffers = {};
+    auto& current_buffer = current_buffers.at(get_buffer_target_index(target));
+    if (current_buffer != buffer) {
+        bind_buffer_nocache(target, buffer);
+        current_buffer = buffer;
+    }
+    return true;
+}
+
+static bool bind_buffer(GLenum target, GLuint buffer, uint32_t binding, mugfx_range range)
+{
+    state->cur_stats.buffer_binds++;
+    if (range.length) {
+        glBindBufferBase(target, binding, buffer);
+    } else {
+        glBindBufferRange(target, binding, buffer, range.offset, range.length);
+    }
+    if (const auto error = glGetError()) {
+        log_error("Error in glBindBufferBase/Range: %s", gl_error_string(error));
+        return false;
+    }
+    return true;
+}
 
 EXPORT void mugfx_init(mugfx_init_params params)
 {
@@ -798,6 +806,8 @@ EXPORT void mugfx_init(mugfx_init_params params)
     state->buffers.init(params.max_num_buffers);
     state->uniform_data.init(params.max_num_uniforms);
     state->geometries.init(params.max_num_geometries);
+
+    glGenQueries(1, &state->frame_time_query);
 }
 
 template <typename T, typename DestroyFunc>
@@ -814,6 +824,7 @@ static void destroy_all(Pool<T>& pool, DestroyFunc destroy)
 EXPORT void mugfx_shutdown()
 {
     assert(state);
+    glDeleteQueries(1, &state->frame_time_query);
     destroy_all(state->shaders, mugfx_shader_destroy);
     destroy_all(state->textures, mugfx_texture_destroy);
     destroy_all(state->materials, mugfx_material_destroy);
@@ -962,6 +973,7 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
         sizeof(mugfx_shader_binding) * MUGFX_MAX_SHADER_BINDINGS);
 
     const auto key = state->shaders.insert(std::move(pool_shader));
+    state->res_stats.shaders_alive++;
     return { key };
 }
 
@@ -991,7 +1003,75 @@ EXPORT void mugfx_shader_destroy(mugfx_shader_id shader_id)
         log_error("Failed to delete shader %#10x: %s", shader_id.id, gl_error_string(error));
     }
 
+    state->res_stats.shaders_alive--;
+
     state->shaders.remove(shader_id.id);
+}
+
+static size_t get_size_per_texel(mugfx_pixel_format fmt)
+{
+    switch (fmt) {
+    case MUGFX_PIXEL_FORMAT_R8:
+        return 1;
+    case MUGFX_PIXEL_FORMAT_RG8:
+        return 2;
+    case MUGFX_PIXEL_FORMAT_RGB8:
+        return 3;
+    case MUGFX_PIXEL_FORMAT_RGBA8:
+        return 4;
+    case MUGFX_PIXEL_FORMAT_SRGB8:
+        return 3;
+    case MUGFX_PIXEL_FORMAT_SRGB8_ALPHA8:
+        return 4;
+
+    case MUGFX_PIXEL_FORMAT_R16F:
+        return 2;
+    case MUGFX_PIXEL_FORMAT_RG16F:
+        return 4;
+    case MUGFX_PIXEL_FORMAT_RGB16F:
+        return 6;
+    case MUGFX_PIXEL_FORMAT_RGBA16F:
+        return 8;
+
+    case MUGFX_PIXEL_FORMAT_R32F:
+        return 4;
+    case MUGFX_PIXEL_FORMAT_RG32F:
+        return 8;
+    case MUGFX_PIXEL_FORMAT_RGB32F:
+        return 12;
+    case MUGFX_PIXEL_FORMAT_RGBA32F:
+        return 16;
+
+    case MUGFX_PIXEL_FORMAT_DEPTH24:
+        return 4; // likely stored as 24+pad
+    case MUGFX_PIXEL_FORMAT_DEPTH32F:
+        return 4;
+    case MUGFX_PIXEL_FORMAT_DEPTH24_STENCIL8:
+        return 4;
+
+    default:
+        return 0;
+    }
+}
+
+static uint64_t estimate_texture_size(mugfx_pixel_format fmt, size_t w, size_t h, bool mips)
+{
+    const auto bpt = get_size_per_texel(fmt);
+    if (bpt == 0) {
+        return 0;
+    }
+
+    uint64_t size = w * h * bpt;
+
+    if (mips) {
+        while (w > 1 || h > 1) {
+            size += w * h * bpt;
+            w = w > 1 ? w / 2 : 1;
+            h = h > 1 ? h / 2 : 1;
+        }
+    }
+
+    return size;
 }
 
 EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
@@ -1078,12 +1158,17 @@ EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
         }
     }
 
+    const auto size_bytes = estimate_texture_size(
+        params.format, params.width, params.height, params.generate_mipmaps);
     const auto key = state->textures.insert(Texture {
         .target = target,
         .texture = texture,
         .width = params.width,
         .height = params.height,
+        .size_bytes = size_bytes,
     });
+    state->res_stats.textures_alive++;
+    state->res_stats.texture_bytes += size_bytes;
     return { key };
 }
 
@@ -1105,6 +1190,9 @@ EXPORT void mugfx_texture_set_data(
         log_error("Invalid data format: %d", data_format);
         return;
     }
+
+    state->cur_stats.texture_uploads++;
+    state->cur_stats.texture_upload_bytes += data.length;
 
     glTexSubImage2D(
         tex->target, 0, 0, 0, tex->width, tex->height, df->format, df->data_type, data.data);
@@ -1134,6 +1222,8 @@ EXPORT void mugfx_texture_destroy(mugfx_texture_id texture)
         log_error("Error destroying texture ID %d: %s", texture.id, gl_error_string(error));
     }
 
+    state->res_stats.textures_alive--;
+    state->res_stats.texture_bytes -= tex->size_bytes;
     state->textures.remove(texture.id);
 }
 
@@ -1271,6 +1361,7 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
         MUGFX_MAX_SHADER_BINDINGS * sizeof(mugfx_shader_binding));
 
     const auto key = state->materials.insert(std::move(mat));
+    state->res_stats.materials_alive++;
     return { key };
 }
 
@@ -1287,6 +1378,7 @@ EXPORT void mugfx_material_destroy(mugfx_material_id material)
         log_error("Error destroying material ID %d: %s", material.id, gl_error_string(error));
     }
 
+    state->res_stats.materials_alive--;
     state->materials.remove(material.id);
 }
 
@@ -1331,6 +1423,8 @@ EXPORT mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params)
         .usage = *usage,
     });
 
+    state->res_stats.buffers_alive++;
+    state->res_stats.buffer_bytes += params.data.length;
     return { key };
 }
 
@@ -1353,6 +1447,9 @@ EXPORT void mugfx_buffer_update(mugfx_buffer_id buffer, size_t offset, mugfx_sli
             log_error("Error in glBufferData: %s", gl_error_string(error));
         }
     } else {
+        state->cur_stats.buffer_uploads++;
+        state->cur_stats.buffer_upload_bytes += data.length;
+
         glBufferSubData(buf->target, offset, data.length, data.data);
         if (const auto error = glGetError()) {
             log_error("Error in glBufferSubData: %s", gl_error_string(error));
@@ -1373,6 +1470,8 @@ EXPORT void mugfx_buffer_destroy(mugfx_buffer_id buffer)
         log_error("Error destroying buffer ID %d: %s", buffer.id, gl_error_string(error));
     }
 
+    state->res_stats.buffers_alive--;
+    state->res_stats.buffer_bytes -= buf->size;
     state->buffers.remove(buffer.id);
 }
 
@@ -1472,6 +1571,10 @@ static bool update_uniform_data(UniformData* udata, Buffer* buffer)
     if (!bind_buffer(GL_UNIFORM_BUFFER, buffer->buffer)) {
         return false;
     }
+
+    state->cur_stats.buffer_uploads++;
+    state->cur_stats.buffer_upload_bytes += udata->buffer_range.length;
+
     glBufferSubData(GL_UNIFORM_BUFFER, udata->buffer_range.offset, udata->buffer_range.length,
         udata->cpu_buffer);
     if (const auto error = glGetError()) {
@@ -1686,6 +1789,7 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
     glBindVertexArray(0);
 
     const auto key = state->geometries.insert(std::move(geom));
+    state->res_stats.geometries_alive++;
     return { key };
 }
 
@@ -1717,6 +1821,7 @@ EXPORT void mugfx_geometry_destroy(mugfx_geometry_id geometry)
         log_error("Error in glDeleteVertexArrays: %s", gl_error_string(error));
     }
 
+    state->res_stats.geometries_alive--;
     state->geometries.remove(geometry.id);
 }
 
@@ -1746,7 +1851,24 @@ EXPORT void mugfx_set_viewport(int x, int y, size_t width, size_t height)
 
 EXPORT void mugfx_set_scissor(int x, int y, size_t width, size_t height) { }
 
-EXPORT void mugfx_begin_frame() { }
+const mugfx_frame_stats* mugfx_get_frame_stats(void)
+{
+    return &state->last_stats;
+}
+
+const mugfx_resource_stats* mugfx_get_resource_stats(void)
+{
+    return &state->res_stats;
+}
+
+EXPORT void mugfx_begin_frame()
+{
+    std::memcpy(&state->last_stats, &state->cur_stats, sizeof(mugfx_frame_stats));
+    std::memset(&state->cur_stats, 0, sizeof(mugfx_frame_stats));
+    state->cur_stats.frame_index = state->last_stats.frame_index + 1;
+
+    glBeginQuery(GL_TIME_ELAPSED, state->frame_time_query);
+}
 
 EXPORT void mugfx_begin_pass(mugfx_render_target_id target)
 {
@@ -1848,6 +1970,23 @@ static bool apply_bindings(mugfx_draw_binding* bindings, size_t num_bindings)
     return true;
 }
 
+static void update_draw_stats(Geometry* geom, size_t instance_count)
+{
+    state->cur_stats.draw_calls++;
+    state->cur_stats.instances_drawn += instance_count;
+
+    const auto inst = instance_count ? instance_count : 1;
+    const auto nverts = geom->index_type ? geom->index_count : geom->vertex_count;
+    state->cur_stats.vertices_submitted += inst * nverts;
+
+    if (geom->draw_mode == GL_TRIANGLES) {
+        state->cur_stats.triangles_submitted += inst * (nverts / 3);
+    } else if (geom->draw_mode == GL_TRIANGLE_STRIP) {
+        state->cur_stats.triangles_submitted += inst * (nverts >= 3 ? nverts - 2 : 0);
+    }
+    // no triangles submitted otherwise
+}
+
 EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings)
 {
@@ -1885,6 +2024,8 @@ EXPORT void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id g
     if (!bind_vao(geom->vao)) {
         return;
     }
+
+    update_draw_stats(geom, instance_count);
 
     if (instance_count) {
         if (geom->index_type) {
@@ -1925,6 +2066,11 @@ EXPORT void mugfx_end_frame()
         return;
     }
     mugfx_flush();
+
+    glEndQuery(GL_TIME_ELAPSED);
+    GLuint64 elapsed_ns = 0;
+    glGetQueryObjectui64v(state->frame_time_query, GL_QUERY_RESULT, &elapsed_ns);
+    state->cur_stats.gpu_frame_ms += (double)elapsed_ns / 1000.f / 1000.f;
 }
 
 }

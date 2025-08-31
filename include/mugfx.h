@@ -458,6 +458,51 @@ void mugfx_render_target_destroy(mugfx_render_target_id target);
 void mugfx_set_viewport(int x, int y, size_t width, size_t height);
 void mugfx_set_scissor(int x, int y, size_t width, size_t height);
 
+// Statistics
+typedef struct {
+    uint64_t frame_index;
+
+    // Submission counts
+    uint64_t draw_calls;
+    uint64_t instances_drawn;
+    // estimates number of VS invocations (i.e. multiplied by instance count)
+    uint64_t vertices_submitted;
+    uint64_t triangles_submitted;
+
+    // State churn
+    uint64_t shader_switches;
+    uint64_t texture_binds;
+    uint64_t buffer_binds;
+    uint64_t render_target_switches;
+
+    // Data movement
+    uint64_t buffer_uploads;
+    uint64_t buffer_upload_bytes;
+    uint64_t texture_uploads;
+    uint64_t texture_upload_bytes;
+
+    // Timing
+    double gpu_frame_ms; // timer query GL_TIME_ELAPSED of last frame
+} mugfx_frame_stats;
+
+// Returns stats for the *last completed frame*. This pointer is stable.
+const mugfx_frame_stats* mugfx_get_frame_stats(void);
+
+typedef struct {
+    size_t textures_alive;
+    size_t buffers_alive;
+    size_t shaders_alive;
+    size_t materials_alive;
+    size_t geometries_alive;
+    size_t render_targets_alive;
+
+    uint64_t texture_bytes; // estimated as width*height*bytes_per_texel
+    uint64_t buffer_bytes;
+} mugfx_resource_stats;
+
+// Returns a pointer to a single (non-double-buffered) struct.
+const mugfx_resource_stats* mugfx_get_resource_stats(void);
+
 // Drawing
 typedef enum {
     MUGFX_BINDING_TYPE_DEFAULT = 0,
