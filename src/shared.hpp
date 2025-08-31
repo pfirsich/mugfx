@@ -123,6 +123,7 @@ struct Pool {
         store_free_list(idx, free_list_head_);
         free_list_head_ = idx;
         ids_[idx].idx = EmptyIndex;
+        ids_[idx].gen++;
         return true;
     }
 
