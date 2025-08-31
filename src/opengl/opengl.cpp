@@ -966,7 +966,7 @@ EXPORT mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader_id, 
 {
     const auto shader = state->shaders.get(shader_id.id);
     if (!shader) {
-        log_error("Shader ID %u does not exist", shader_id.id);
+        log_error("Shader ID %#10x does not exist", shader_id.id);
         return {};
     }
     if (idx >= MUGFX_MAX_SHADER_BINDINGS) {
@@ -979,13 +979,13 @@ EXPORT void mugfx_shader_destroy(mugfx_shader_id shader_id)
 {
     const auto shader = state->shaders.get(shader_id.id);
     if (!shader) {
-        log_error("Shader ID %u does not exist", shader_id.id);
+        log_error("Shader ID %#10x does not exist", shader_id.id);
         return;
     }
 
     glDeleteShader(shader->shader);
     if (const auto error = glGetError()) {
-        log_error("Failed to delete shader %u: %s", shader_id.id, gl_error_string(error));
+        log_error("Failed to delete shader %#10x: %s", shader_id.id, gl_error_string(error));
     }
 
     state->shaders.remove(shader_id.id);
@@ -1089,7 +1089,7 @@ EXPORT void mugfx_texture_set_data(
 {
     const auto tex = state->textures.get(texture.id);
     if (!tex) {
-        log_error("Texture ID %u does not exist", texture.id);
+        log_error("Texture ID %#10x does not exist", texture.id);
         return;
     }
 
@@ -1111,7 +1111,7 @@ EXPORT void mugfx_texture_get_size(mugfx_texture_id texture, uint32_t* width, ui
 {
     const auto tex = state->textures.get(texture.id);
     if (!tex) {
-        log_error("Texture ID %u does not exist", texture.id);
+        log_error("Texture ID %#10x does not exist", texture.id);
         return;
     }
     *width = (uint32_t)tex->width;
@@ -1122,7 +1122,7 @@ EXPORT void mugfx_texture_destroy(mugfx_texture_id texture)
 {
     const auto tex = state->textures.get(texture.id);
     if (!tex) {
-        log_error("Texture ID %u does not exist", texture.id);
+        log_error("Texture ID %#10x does not exist", texture.id);
         return;
     }
 
@@ -1190,13 +1190,13 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
 
     const auto vert = state->shaders.get(params.vert_shader.id);
     if (!vert) {
-        log_error("Shader ID %u does not exist", params.vert_shader.id);
+        log_error("Shader ID %#10x does not exist", params.vert_shader.id);
         return { 0 };
     }
 
     const auto frag = state->shaders.get(params.frag_shader.id);
     if (!frag) {
-        log_error("Shader ID %u does not exist", params.frag_shader.id);
+        log_error("Shader ID %#10x does not exist", params.frag_shader.id);
         return { 0 };
     }
 
@@ -1273,7 +1273,7 @@ EXPORT void mugfx_material_destroy(mugfx_material_id material)
 {
     const auto mat = state->materials.get(material.id);
     if (!mat) {
-        log_error("Material ID %u does not exist", material.id);
+        log_error("Material ID %#10x does not exist", material.id);
         return;
     }
 
@@ -1333,7 +1333,7 @@ EXPORT void mugfx_buffer_update(mugfx_buffer_id buffer, size_t offset, mugfx_sli
 {
     const auto buf = state->buffers.get(buffer.id);
     if (!buf) {
-        log_error("Buffer ID %u does not exist", buffer.id);
+        log_error("Buffer ID %#10x does not exist", buffer.id);
         return;
     }
 
@@ -1359,7 +1359,7 @@ EXPORT void mugfx_buffer_destroy(mugfx_buffer_id buffer)
 {
     const auto buf = state->buffers.get(buffer.id);
     if (!buf) {
-        log_error("Buffer ID %u does not exist", buffer.id);
+        log_error("Buffer ID %#10x does not exist", buffer.id);
         return;
     }
 
@@ -1404,7 +1404,7 @@ EXPORT mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create
 
     auto buffer = state->buffers.get(buffer_id.id);
     if (!buffer) {
-        log_error("Buffer ID %u does not exist", buffer_id.id);
+        log_error("Buffer ID %#10x does not exist", buffer_id.id);
         return { 0 };
     }
 
@@ -1431,7 +1431,7 @@ EXPORT void* mugfx_uniform_data_get_ptr(mugfx_uniform_data_id uniform_data_id)
 {
     const auto udata = state->uniform_data.get(uniform_data_id.id);
     if (!udata) {
-        log_error("Uniform data ID %u does not exist", uniform_data_id.id);
+        log_error("Uniform data ID %#10x does not exist", uniform_data_id.id);
         return nullptr;
     }
     udata->dirty = true;
@@ -1442,7 +1442,7 @@ EXPORT void mugfx_uniform_data_update(mugfx_uniform_data_id uniform_data_id)
 {
     const auto udata = state->uniform_data.get(uniform_data_id.id);
     if (!udata) {
-        log_error("Uniform data ID %u does not exist", uniform_data_id.id);
+        log_error("Uniform data ID %#10x does not exist", uniform_data_id.id);
         return;
     }
     udata->dirty = true;
@@ -1452,7 +1452,7 @@ EXPORT void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data_id)
 {
     const auto udata = state->uniform_data.get(uniform_data_id.id);
     if (!udata) {
-        log_error("Uniform data ID %u does not exist", uniform_data_id.id);
+        log_error("Uniform data ID %#10x does not exist", uniform_data_id.id);
         return;
     }
     if (udata->cpu_buffer_owned) {
@@ -1528,7 +1528,7 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         }
         vbufs[b] = state->buffers.get(buf.buffer.id);
         if (!vbufs[b]) {
-            log_error("Vertex buffer ID %u does not exist", buf.buffer.id);
+            log_error("Vertex buffer ID %#10x does not exist", buf.buffer.id);
             return { 0 };
         }
         vfmt[b].buffer_offset = buf.buffer_offset;
@@ -1595,7 +1595,7 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
 
         ibuf = state->buffers.get(params.index_buffer.id);
         if (!ibuf) {
-            log_error("Index buffer ID %u does not exist", params.index_buffer.id);
+            log_error("Index buffer ID %#10x does not exist", params.index_buffer.id);
             return { 0 };
         }
 
@@ -1703,7 +1703,7 @@ EXPORT void mugfx_geometry_destroy(mugfx_geometry_id geometry)
 {
     const auto geom = state->geometries.get(geometry.id);
     if (!geom) {
-        log_error("Geometry ID %u does not exist", geometry.id);
+        log_error("Geometry ID %#10x does not exist", geometry.id);
         return;
     }
 
@@ -1798,14 +1798,14 @@ static bool apply_bindings(mugfx_draw_binding* bindings, size_t num_bindings)
         if (bindings[i].type == MUGFX_BINDING_TYPE_UNIFORM_DATA) {
             const auto udata = state->uniform_data.get(bindings[i].uniform_data.id.id);
             if (!udata) {
-                log_error("Uniform data ID %u does not exist", bindings[i].uniform_data.id.id);
+                log_error("Uniform data ID %#10x does not exist", bindings[i].uniform_data.id.id);
                 return false;
             }
 
             const auto buffer = state->buffers.get(udata->buffer.id);
             assert(buffer);
             if (!buffer) {
-                log_error("Buffer ID %u does not exist", udata->buffer.id);
+                log_error("Buffer ID %#10x does not exist", udata->buffer.id);
                 return false;
             }
 
@@ -1822,7 +1822,7 @@ static bool apply_bindings(mugfx_draw_binding* bindings, size_t num_bindings)
         } else if (bindings[i].type == MUGFX_BINDING_TYPE_TEXTURE) {
             const auto tex = state->textures.get(bindings[i].texture.id.id);
             if (!tex) {
-                log_error("Texture ID %u does not exist", bindings[i].texture.id.id);
+                log_error("Texture ID %#10x does not exist", bindings[i].texture.id.id);
                 return false;
             }
             if (!bind_texture(bindings[i].texture.binding, tex->target, tex->texture)) {
@@ -1831,7 +1831,7 @@ static bool apply_bindings(mugfx_draw_binding* bindings, size_t num_bindings)
         } else if (bindings[i].type == MUGFX_BINDING_TYPE_BUFFER) {
             const auto buffer = state->buffers.get(bindings[i].buffer.id.id);
             if (!buffer) {
-                log_error("Buffer ID %u does not exist", bindings[i].buffer.id.id);
+                log_error("Buffer ID %#10x does not exist", bindings[i].buffer.id.id);
                 return false;
             }
             if (!bind_buffer(buffer->target, buffer->buffer, bindings[i].uniform_data.binding,
@@ -1859,13 +1859,13 @@ EXPORT void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id g
 
     const auto mat = state->materials.get(material.id);
     if (!mat) {
-        log_error("Material ID %u does not exist", material.id);
+        log_error("Material ID %#10x does not exist", material.id);
         return;
     }
 
     const auto geom = state->geometries.get(geometry.id);
     if (!geom) {
-        log_error("Geometry ID %u does not exist", geometry.id);
+        log_error("Geometry ID %#10x does not exist", geometry.id);
         return;
     }
 
