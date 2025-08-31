@@ -903,6 +903,11 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
         return { 0 };
     }
 
+    auto error_return = [&]() {
+        glDeleteShader(shader);
+        return mugfx_shader_id { 0 };
+    };
+
     // The preamble including the version directives and mandatory precision qualifiers in the
     // vertex shader for WebGL are inserted by mugfx, because it knows best which API and which
     // version is used.
@@ -920,8 +925,7 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
     glShaderSource(shader, sources.size(), sources.data(), lengths.data());
     if (const auto error = glGetError()) {
         log_error("Error in glShaderSource: %s", gl_error_string(error));
-        glDeleteShader(shader);
-        return { 0 };
+        return error_return();
     }
 
     glCompileShader(shader);
@@ -941,8 +945,7 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
     if (!compile_status) {
         log_error("Shader compilation failed: %s", info_log);
         deallocate(info_log, log_length);
-        glDeleteShader(shader);
-        return { 0 };
+        return error_return();
     }
 
     if (info_log) {
@@ -1188,30 +1191,33 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
         return { 0 };
     }
 
+    auto error_return = [&]() {
+        glDeleteProgram(prog);
+        return mugfx_material_id { 0 };
+    };
+
     const auto vert = state->shaders.get(params.vert_shader.id);
     if (!vert) {
         log_error("Shader ID %#10x does not exist", params.vert_shader.id);
-        return { 0 };
+        return error_return();
     }
 
     const auto frag = state->shaders.get(params.frag_shader.id);
     if (!frag) {
         log_error("Shader ID %#10x does not exist", params.frag_shader.id);
-        return { 0 };
+        return error_return();
     }
 
     glAttachShader(prog, vert->shader);
     if (const auto error = glGetError()) {
         log_error("Error in glAttachShader: %s", gl_error_string(error));
-        glDeleteProgram(prog);
-        return { 0 };
+        return error_return();
     }
 
     glAttachShader(prog, frag->shader);
     if (const auto error = glGetError()) {
         log_error("Error in glAttachShader: %s", gl_error_string(error));
-        glDeleteProgram(prog);
-        return { 0 };
+        return error_return();
     }
 
     // Don't need to check GL errors because documented errors are only relevant if prog is not a
@@ -1232,8 +1238,7 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
     if (linkStatus == GL_FALSE) {
         log_error("Linking shader failed: %s", info_log);
         deallocate(info_log, log_length);
-        glDeleteProgram(prog);
-        return { 0 };
+        return error_return();
     }
 
     if (info_log) {
