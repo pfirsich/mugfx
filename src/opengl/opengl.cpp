@@ -262,12 +262,22 @@ static void set_enabled(GLenum cap, bool value)
     }
 }
 
+static void set_depth_write(bool depth_write)
+{
+    static bool current_write = true;
+
+    if (current_write != depth_write) {
+        glDepthMask(depth_write ? GL_TRUE : GL_FALSE);
+        current_write = depth_write;
+    }
+}
+
 static bool set_depth(GLenum depth_func, bool depth_write)
 {
     static bool current_enabled = false;
     static GLenum current_func = GL_LESS;
-    static bool current_write = true;
 
+    // No test (GL_ALWAYS) and no writes is equivalent to disabling depth testing
     const auto enabled = depth_func != GL_ALWAYS || depth_write;
     if (current_enabled != enabled) {
         set_enabled(GL_DEPTH_TEST, enabled);
@@ -288,10 +298,7 @@ static bool set_depth(GLenum depth_func, bool depth_write)
         current_func = depth_func;
     }
 
-    if (current_write != depth_write) {
-        glDepthMask(depth_write ? GL_TRUE : GL_FALSE);
-        current_write = depth_write;
-    }
+    set_depth_write(depth_write);
 
     return true;
 }
@@ -1884,10 +1891,12 @@ EXPORT void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values)
 {
     GLenum gl_mask = 0;
     if (mask & MUGFX_CLEAR_COLOR) {
+        set_color_write_mask({ true, true, true, true, true });
         glClearColor(values.color[0], values.color[1], values.color[2], values.color[3]);
         gl_mask |= GL_COLOR_BUFFER_BIT;
     }
     if (mask & MUGFX_CLEAR_DEPTH) {
+        set_depth_write(true);
         glClearDepthf(values.depth);
         gl_mask |= GL_DEPTH_BUFFER_BIT;
     }
