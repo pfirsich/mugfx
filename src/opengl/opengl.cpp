@@ -1858,12 +1858,12 @@ EXPORT void mugfx_set_viewport(int x, int y, size_t width, size_t height)
 
 EXPORT void mugfx_set_scissor(int x, int y, size_t width, size_t height) { }
 
-const mugfx_frame_stats* mugfx_get_frame_stats(void)
+EXPORT const mugfx_frame_stats* mugfx_get_frame_stats(void)
 {
     return &state->last_stats;
 }
 
-const mugfx_resource_stats* mugfx_get_resource_stats(void)
+EXPORT const mugfx_resource_stats* mugfx_get_resource_stats(void)
 {
     return &state->res_stats;
 }
