@@ -438,20 +438,28 @@ typedef struct {
 } mugfx_render_target_id;
 
 typedef struct {
+    mugfx_pixel_format format;
+    bool sampleable; // You can get the texture for the attachment iff it is sampleable
+} mugfx_render_target_attachment;
+
+typedef struct {
     size_t width;
     size_t height;
-    mugfx_pixel_format color_formats[MUGFX_MAX_COLOR_FORMATS]; // default is {RGBA8}
-    mugfx_pixel_format depth_format; // default is DEPTH24
+    // For these format = 0 means no attachment
+    mugfx_render_target_attachment color[MUGFX_MAX_COLOR_FORMATS];
+    mugfx_render_target_attachment depth;
     size_t samples;
 } mugfx_render_target_create_params;
 
 #define MUGFX_RENDER_TARGET_BACKBUFFER (mugfx_render_target_id) { 0 }
 
 mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_create_params params);
+void mugfx_render_target_get_size(mugfx_render_target_id target, size_t* width, size_t* height);
+mugfx_texture_id mugfx_render_target_get_color_texture(
+    mugfx_render_target_id target, size_t color_index);
+mugfx_texture_id mugfx_render_target_get_depth_texture(mugfx_render_target_id target);
 void mugfx_render_target_blit_to_render_target(
     mugfx_render_target_id src_target, mugfx_render_target_id dst_target);
-void mugfx_render_target_blit_to_texture(
-    mugfx_render_target_id src_target, mugfx_texture_id dst_texture);
 void mugfx_render_target_destroy(mugfx_render_target_id target);
 
 // Dynamic Pipeline State

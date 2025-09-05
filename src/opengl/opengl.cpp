@@ -94,6 +94,12 @@ static std::optional<GLenum> gl_pixel_format(mugfx_pixel_format format)
     }
 }
 
+static bool is_depth_format(mugfx_pixel_format fmt)
+{
+    return fmt == MUGFX_PIXEL_FORMAT_DEPTH24 || fmt == MUGFX_PIXEL_FORMAT_DEPTH32F
+        || fmt == MUGFX_PIXEL_FORMAT_DEPTH24_STENCIL8;
+}
+
 struct DataFormat {
     GLenum format;
     GLenum data_type;
@@ -524,6 +530,19 @@ struct Geometry {
     GLsizei max_index_count;
 };
 
+struct RenderTargetAttachment {
+    mugfx_pixel_format format;
+    mugfx_texture_id texture;
+    GLuint rbo;
+};
+
+struct RenderTarget {
+    GLuint fbo;
+    size_t width, height;
+    std::array<RenderTargetAttachment, MUGFX_MAX_COLOR_FORMATS> color = {};
+    RenderTargetAttachment depth = {};
+};
+
 struct Pass {
     mugfx_render_target_id target = { 0 };
     bool in_pass = false;
@@ -557,11 +576,13 @@ struct State {
     Pool<Buffer> buffers;
     Pool<UniformData> uniform_data;
     Pool<Geometry> geometries;
+    Pool<RenderTarget> render_targets;
     Pass current_pass;
     mugfx_frame_stats cur_stats = {}, last_stats = {};
     mugfx_resource_stats res_stats = {};
     GLuint frame_time_query = 0;
     GlState current_gl;
+    std::array<int, 4> backbuffer_viewport = {};
 };
 
 State* state = nullptr;
@@ -796,6 +817,25 @@ static bool bind_buffer(GLenum target, GLuint buffer, uint32_t binding, mugfx_ra
     return true;
 }
 
+enum class FboTarget { Read = 0, Draw };
+
+static bool bind_fbo(FboTarget target, GLuint fbo)
+{
+    static GLenum gl_targets[] = { GL_READ_FRAMEBUFFER, GL_DRAW_FRAMEBUFFER };
+    auto& current_fbo = state->current_gl.fbos.at((int)target);
+    if (fbo != current_fbo) {
+        state->cur_stats.render_target_switches++;
+        glBindFramebuffer(gl_targets[(int)target], fbo);
+        if (const auto error = glGetError()) {
+            log_error("Error in glBindFramebuffer: %s", gl_error_string(error));
+            return false;
+        }
+        current_fbo = fbo;
+    }
+
+    return true;
+}
+
 EXPORT void mugfx_init(mugfx_init_params params)
 {
     common_init(params);
@@ -810,6 +850,7 @@ EXPORT void mugfx_init(mugfx_init_params params)
     state->buffers.init(params.max_num_buffers);
     state->uniform_data.init(params.max_num_uniforms);
     state->geometries.init(params.max_num_geometries);
+    state->render_targets.init(params.max_num_render_targets);
 
     glGenQueries(1, &state->frame_time_query);
 }
@@ -835,6 +876,7 @@ EXPORT void mugfx_shutdown()
     destroy_all(state->buffers, mugfx_buffer_destroy);
     destroy_all(state->uniform_data, mugfx_uniform_data_destroy);
     destroy_all(state->geometries, mugfx_geometry_destroy);
+    destroy_all(state->render_targets, mugfx_render_target_destroy);
 #ifndef MUGFX_WEBGL
     gladLoaderUnloadGL();
 #endif
@@ -1829,28 +1871,331 @@ EXPORT void mugfx_geometry_destroy(mugfx_geometry_id geometry)
     state->geometries.remove(geometry.id);
 }
 
+static void destroy(RenderTargetAttachment& a)
+{
+    if (a.texture.id) {
+        mugfx_texture_destroy(a.texture);
+    } else if (a.rbo) {
+        glDeleteRenderbuffers(1, &a.rbo);
+    }
+}
+
+static bool init_attachment(RenderTargetAttachment& rt_att, size_t width, size_t height,
+    size_t samples, mugfx_pixel_format format, bool sampleable, GLenum attachment)
+{
+    const auto gl_format = gl_pixel_format(format);
+    if (!gl_format) {
+        log_error("Invalid pixel format %d", format);
+        return false;
+    }
+
+    rt_att.format = format;
+
+    if (sampleable) {
+        // Texture
+        rt_att.texture = mugfx_texture_create({
+            .width = width,
+            .height = height,
+            .format = format,
+            .wrap_s = MUGFX_TEXTURE_WRAP_CLAMP_TO_EDGE,
+            .wrap_t = MUGFX_TEXTURE_WRAP_CLAMP_TO_EDGE,
+            .min_filter = MUGFX_TEXTURE_MIN_FILTER_LINEAR,
+            .mag_filter = MUGFX_TEXTURE_MAG_FILTER_LINEAR,
+            .generate_mipmaps = false,
+            .data = { .data = nullptr, .length = 0 },
+            .data_format = format,
+        });
+
+        if (!rt_att.texture.id) {
+            log_error("Failed to create texture");
+            return false;
+        }
+
+        const auto tex = state->textures.get(rt_att.texture.id);
+        assert(tex);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, tex->texture, 0);
+        if (const auto err = glGetError()) {
+            log_error("glFramebufferTexture2D failed: %s", gl_error_string(err));
+            return false;
+        }
+    } else {
+        // Renderbuffer
+        glGenRenderbuffers(1, &rt_att.rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, rt_att.rbo);
+
+        if (samples > 1) {
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, *gl_format, width, height);
+        } else {
+            glRenderbufferStorage(GL_RENDERBUFFER, *gl_format, width, height);
+        }
+        if (const auto err = glGetError()) {
+            log_error("glRenderbufferStorage failed: %s", gl_error_string(err));
+            return false;
+        }
+
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, attachment, GL_RENDERBUFFER, rt_att.rbo);
+        if (const auto err = glGetError()) {
+            log_error("glFramebufferRenderbuffer failed: %s", gl_error_string(err));
+            return false;
+        }
+    }
+
+    return true;
+}
+
 EXPORT mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_create_params params)
 {
-    return { 0 };
+    if (params.width == 0 || params.height == 0) {
+        log_error("Render target width/height must be > 0");
+        return { 0 };
+    }
+
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    if (fbo == 0) {
+        log_error("Failed to create framebuffer: %s", gl_error_string(glGetError()));
+        return { 0 };
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    RenderTarget rt = {
+        .fbo = fbo,
+        .width = (uint32_t)params.width,
+        .height = (uint32_t)params.height,
+    };
+
+    auto error_return = [&]() -> mugfx_render_target_id {
+        for (auto& ca : rt.color) {
+            destroy(ca);
+        }
+        destroy(rt.depth);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fbo);
+        return { 0 };
+    };
+
+    // Color attachments
+    GLenum draw_bufs[MUGFX_MAX_COLOR_FORMATS];
+    GLsizei num_draw_bufs = 0;
+
+    for (size_t i = 0; i < MUGFX_MAX_COLOR_FORMATS; ++i) {
+        const auto& c = params.color[i];
+        if (c.format == 0) {
+            break;
+        }
+
+        if (is_depth_format(c.format)) {
+            log_error("Color attachment %u has non-color format %d", (unsigned)i, c.format);
+            return error_return();
+        }
+
+        const auto attachment = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
+
+        if (!init_attachment(rt.color[i], params.width, params.height, params.samples,
+                params.color[i].format, params.color[i].sampleable, attachment)) {
+            log_error("Failed to create render target color attachment %lu", i);
+            return error_return();
+        }
+
+        draw_bufs[num_draw_bufs++] = attachment;
+    }
+
+    // Depth attachment (optional)
+    if (params.depth.format) {
+        if (!is_depth_format(params.depth.format)) {
+            log_error("Depth attachment has non-depth format %d", params.depth.format);
+            return error_return();
+        }
+
+        const auto attachment = (params.depth.format == MUGFX_PIXEL_FORMAT_DEPTH24_STENCIL8)
+            ? GL_DEPTH_STENCIL_ATTACHMENT
+            : GL_DEPTH_ATTACHMENT;
+
+        if (!init_attachment(rt.depth, params.width, params.height, params.samples,
+                params.depth.format, params.depth.sampleable, attachment)) {
+            log_error("Failed to create render target depth attachment");
+            return error_return();
+        }
+    }
+
+    // Configure draw buffers
+    if (num_draw_bufs == 0) {
+        const GLenum none = GL_NONE;
+        glDrawBuffers(1, &none);
+    } else {
+        glDrawBuffers(num_draw_bufs, draw_bufs);
+    }
+
+    // Check completeness
+    const auto status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        log_error("Framebuffer incomplete: 0x%04x", status);
+        return error_return();
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    const auto key = state->render_targets.insert(std::move(rt));
+    state->res_stats.render_targets_alive++;
+    return { key };
+}
+
+EXPORT void mugfx_render_target_get_size(
+    mugfx_render_target_id target, size_t* width, size_t* height)
+{
+    const auto rt = state->render_targets.get(target.id);
+    if (!rt) {
+        log_error("Render target ID %#10x does not exist", target.id);
+        return;
+    }
+    if (width) {
+        *width = rt->width;
+    }
+    if (height) {
+        *height = rt->height;
+    }
+}
+
+EXPORT mugfx_texture_id mugfx_render_target_get_color_texture(
+    mugfx_render_target_id target, size_t color_index)
+{
+    const auto rt = state->render_targets.get(target.id);
+    if (!rt) {
+        log_error("Render target ID%#10x does not exist", target.id);
+        return { 0 };
+    }
+    return rt->color.at(color_index).texture;
+}
+
+EXPORT mugfx_texture_id mugfx_render_target_get_depth_texture(mugfx_render_target_id target)
+{
+    const auto rt = state->render_targets.get(target.id);
+    if (!rt) {
+        log_error("Render target ID %#10x doesnot exist", target.id);
+        return { 0 };
+    }
+    return rt->depth.texture;
+}
+
+static void get_viewport_size(GLint* w, GLint* h)
+{
+    GLint vp[4] = { 0, 0, 0, 0 };
+    glGetIntegerv(GL_VIEWPORT, vp);
+    *w = vp[2];
+    *h = vp[3];
+}
+
+static GLenum get_bits(RenderTarget& rt)
+{
+    GLenum bits = 0;
+    for (const auto& c : rt.color) {
+        if (c.format) {
+            bits |= GL_COLOR_BUFFER_BIT;
+            break;
+        }
+    }
+    if (rt.depth.format) {
+        bits |= GL_DEPTH_BUFFER_BIT;
+        if (rt.depth.format == MUGFX_PIXEL_FORMAT_DEPTH24_STENCIL8) {
+            bits |= GL_STENCIL_BUFFER_BIT;
+        }
+    }
+    return bits;
+}
+
+struct RtInfo {
+    GLuint fbo;
+    GLint width, height;
+    GLenum bits;
+};
+
+static RtInfo get_rt_info(mugfx_render_target_id rt_id)
+{
+    if (rt_id.id) {
+        const auto rt = state->render_targets.get(rt_id.id);
+        if (!rt) {
+            log_error("Render target ID %#10x does not exist", rt_id.id);
+            return {};
+        }
+        return { rt->fbo, (GLint)rt->width, (GLint)rt->height, get_bits(*rt) };
+    } else {
+        GLint w = 0, h = 0;
+        get_viewport_size(&w, &h);
+        return { 0, w, h, GL_COLOR_BUFFER_BIT }; // only color?
+    }
 }
 
 EXPORT void mugfx_render_target_blit_to_render_target(
     mugfx_render_target_id src_target, mugfx_render_target_id dst_target)
 {
+    const auto src = get_rt_info(src_target);
+    if (src.width == 0 && src.height == 0) {
+        return;
+    }
+
+    const auto dst = get_rt_info(dst_target);
+    if (dst.width == 0 && dst.height == 0) {
+        return;
+    }
+
+    bind_fbo(FboTarget::Read, src.fbo);
+    bind_fbo(FboTarget::Draw, dst.fbo);
+
+    const auto bits = src.bits & dst.bits;
+    const auto depth = bits & (GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+    if (depth) {
+        glBlitFramebuffer(
+            0, 0, src.width, src.height, 0, 0, dst.width, dst.height, depth, GL_NEAREST);
+    }
+
+    if (const auto err = glGetError()) {
+        log_error("glBlitFramebuffer failed: %s", gl_error_string(err));
+    }
+
+    if (bits & GL_COLOR_BUFFER_BIT) {
+        glBlitFramebuffer(0, 0, src.width, src.height, 0, 0, dst.width, dst.height,
+            GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    }
+
+    if (const auto err = glGetError()) {
+        log_error("glBlitFramebuffer failed: %s", gl_error_string(err));
+    }
+
+    bind_fbo(FboTarget::Read, 0);
+    bind_fbo(FboTarget::Draw, 0);
 }
 
-EXPORT void mugfx_render_target_blit_to_texture(
-    mugfx_render_target_id src_target, mugfx_texture_id dst_texture)
+EXPORT void mugfx_render_target_destroy(mugfx_render_target_id target)
 {
+    const auto rt = state->render_targets.get(target.id);
+    if (!rt) {
+        log_error("Render target ID %#10x does notexist", target.id);
+        return;
+    }
+
+    glDeleteFramebuffers(1, &rt->fbo);
+    if (const auto err = glGetError()) {
+        log_error("Error destroying framebuffer %#10x: %s", target.id, gl_error_string(err));
+    }
+
+    for (auto& ca : rt->color) {
+        destroy(ca);
+    }
+    destroy(rt->depth);
+
+    state->res_stats.render_targets_alive--;
+    state->render_targets.remove(target.id);
 }
-
-EXPORT void mugfx_render_target_destroy(mugfx_render_target_id target) { }
-
-EXPORT void mugfx_render_target_bind(mugfx_render_target_id target) { }
 
 EXPORT void mugfx_set_viewport(int x, int y, size_t width, size_t height)
 {
-    glViewport(x, y, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+    const auto current_fbo = state->current_gl.fbos.at((int)FboTarget::Draw);
+    if (current_fbo == 0) {
+        state->backbuffer_viewport = { x, y, (int)width, (int)height };
+    }
+    glViewport(x, y, (GLsizei)width, (GLsizei)height);
 }
 
 EXPORT void mugfx_set_scissor(int x, int y, size_t width, size_t height)
@@ -1886,6 +2231,20 @@ EXPORT void mugfx_begin_pass(mugfx_render_target_id target)
     }
     state->current_pass.in_pass = true;
     state->current_pass.target = target;
+
+    if (target.id) {
+        const auto rt = state->render_targets.get(target.id);
+        if (!rt) {
+            log_error("Render target ID %#10x does notexist", target.id);
+            return;
+        }
+        bind_fbo(FboTarget::Draw, rt->fbo);
+        glViewport(0, 0, rt->width, rt->height);
+    } else {
+        bind_fbo(FboTarget::Draw, 0);
+        glViewport(state->backbuffer_viewport[0], state->backbuffer_viewport[1],
+            state->backbuffer_viewport[2], state->backbuffer_viewport[3]);
+    }
 }
 
 EXPORT void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values)
@@ -2081,6 +2440,8 @@ EXPORT void mugfx_end_frame()
     GLuint64 elapsed_ns = 0;
     glGetQueryObjectui64v(state->frame_time_query, GL_QUERY_RESULT, &elapsed_ns);
     state->cur_stats.gpu_frame_ms += (double)elapsed_ns / 1000.f / 1000.f;
-}
 
+    // so mugfx_set_viewport in a resize callback or something will set backbuffer_viewport
+    bind_fbo(FboTarget::Draw, 0);
+}
 }

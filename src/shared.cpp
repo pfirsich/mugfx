@@ -200,10 +200,4 @@ void default_init(mugfx_geometry_create_params& params)
     set_default(params.draw_mode, MUGFX_DRAW_MODE_TRIANGLES);
 }
 
-void default_init(mugfx_render_target_create_params& params)
-{
-    set_default(params.color_formats[0], MUGFX_PIXEL_FORMAT_RGBA8);
-    set_default(params.depth_format, MUGFX_PIXEL_FORMAT_DEPTH24);
-}
-
 }

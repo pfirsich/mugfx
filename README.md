@@ -98,7 +98,6 @@ Just `add_subdirectory` this project with CMake and link against the `mugfx` tar
 
 * WebGL (Emscripten) example
 * Instanced Rendering
-* Render Targets
 * Uniform Optimizations:
   - `CONSTANT`: OpenGL: Single shared, large uniform buffer bound once, Vulkan: Specialization Constants
   - `FRAME`: Pool multiple together and triple buffer them (one being written by CPU, one waiting for GPU, one being read by GPU)
