@@ -100,24 +100,37 @@ struct App {
             .stage = MUGFX_SHADER_STAGE_FRAGMENT,
             .source = checker_frag,
             .bindings = { { .type = MUGFX_SHADER_BINDING_TYPE_UNIFORM, .binding = 0 }, },
+            .debug_label = "checkerboard",
         });
-        checker_mat = mugfx_material_create({ .vert_shader = vs, .frag_shader = checker_fs });
+        checker_mat = mugfx_material_create({
+            .vert_shader = vs,
+            .frag_shader = checker_fs,
+            .debug_label = "checkerboard",
+        });
 
         post_fs = mugfx_shader_create({
             .stage = MUGFX_SHADER_STAGE_FRAGMENT,
             .source = post_frag,
             .bindings = { { .type = MUGFX_SHADER_BINDING_TYPE_SAMPLER, .binding = 0 }, },
+            .debug_label = "vignette",
         });
-        post_mat = mugfx_material_create({ .vert_shader = vs, .frag_shader = post_fs });
+        post_mat = mugfx_material_create({
+            .vert_shader = vs,
+            .frag_shader = post_fs,
+            .debug_label = "vignette",
+        });
 
         fs_quad = mugfx_geometry_create({
-            .draw_mode = MUGFX_DRAW_MODE_TRIANGLE_STRIP, .vertex_count = 4,
+            .draw_mode = MUGFX_DRAW_MODE_TRIANGLE_STRIP,
+            .vertex_count = 4,
             // vertex_buffers left empty; no index buffer (attribute-less geometry)
+            .debug_label = "fs_quad",
         });
 
         uframe = mugfx_uniform_data_create({
             .usage_hint = MUGFX_UNIFORM_DATA_USAGE_HINT_FRAME,
             .size = sizeof(UFrame),
+            .debug_label = "uframe",
         });
 
         offscreen = mugfx_render_target_create({
@@ -127,6 +140,7 @@ struct App {
                 { MUGFX_PIXEL_FORMAT_RGBA8, true },
             },
             .depth = { MUGFX_PIXEL_FORMAT_DEPTH24, false },
+            .debug_label = "offscreen",
         });
     }
 
@@ -153,21 +167,20 @@ struct App {
         mugfx_begin_frame();
 
         // Pass 1: offscreen checker pattern
-        mugfx_begin_pass(offscreen);
-        mugfx_clear(MUGFX_CLEAR_COLOR_DEPTH, MUGFX_CLEAR_DEFAULT);
         std::array<mugfx_draw_binding, 1> pass1_bindings {
             mugfx_draw_binding {
                 .type = MUGFX_BINDING_TYPE_UNIFORM_DATA,
                 .uniform_data = { .binding = 0, .id = uframe },
             },
         };
+
+        mugfx_debug_push("offscreen");
+        mugfx_begin_pass(offscreen);
         mugfx_draw(checker_mat, fs_quad, pass1_bindings.data(), pass1_bindings.size());
         mugfx_end_pass();
+        mugfx_debug_pop();
 
         // Pass 2: vignette
-        mugfx_begin_pass(MUGFX_RENDER_TARGET_BACKBUFFER);
-        mugfx_set_viewport(0, 0, win_w, win_h);
-        mugfx_clear(MUGFX_CLEAR_COLOR_DEPTH, MUGFX_CLEAR_DEFAULT);
         const auto offscreen_tex = mugfx_render_target_get_color_texture(offscreen, 0);
         std::array<mugfx_draw_binding, 1> pass2_bindings {
             mugfx_draw_binding {
@@ -175,8 +188,13 @@ struct App {
                 .texture = { .binding = 0, .id = offscreen_tex },
             },
         };
+
+        mugfx_debug_push("vignette");
+        mugfx_begin_pass(MUGFX_RENDER_TARGET_BACKBUFFER);
+        mugfx_set_viewport(0, 0, win_w, win_h);
         mugfx_draw(post_mat, fs_quad, pass2_bindings.data(), pass2_bindings.size());
         mugfx_end_pass();
+        mugfx_debug_pop();
 
         mugfx_end_frame();
         window.swap();

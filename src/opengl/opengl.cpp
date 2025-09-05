@@ -960,6 +960,13 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
         return { 0 };
     }
 
+    if (params.debug_label && GLAD_GL_KHR_debug) {
+        glObjectLabel(GL_SHADER, shader, -1, params.debug_label);
+        if (const auto err = glGetError()) {
+            log_warn("glObjectLabel failed: %s", gl_error_string(err));
+        }
+    }
+
     auto error_return = [&]() {
         glDeleteShader(shader);
         return mugfx_shader_id { 0 };
@@ -1136,6 +1143,14 @@ EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
 
     if (!bind_texture(0, target, texture)) {
         return error_return();
+    }
+
+    // The texture is not created until it is bound, glGenTexture just reserves the name
+    if (params.debug_label && GLAD_GL_KHR_debug) {
+        glObjectLabel(GL_TEXTURE, texture, -1, params.debug_label);
+        if (const auto err = glGetError()) {
+            log_warn("glObjectLabel failed: %s", gl_error_string(err));
+        }
     }
 
     // wrapping
@@ -1327,6 +1342,13 @@ EXPORT mugfx_material_id mugfx_material_create(mugfx_material_create_params para
         return { 0 };
     }
 
+    if (params.debug_label && GLAD_GL_KHR_debug) {
+        glObjectLabel(GL_PROGRAM, prog, -1, params.debug_label);
+        if (const auto err = glGetError()) {
+            log_warn("glObjectLabel failed: %s", gl_error_string(err));
+        }
+    }
+
     auto error_return = [&]() {
         glDeleteProgram(prog);
         return mugfx_material_id { 0 };
@@ -1455,6 +1477,14 @@ EXPORT mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params)
 
     // Errors: target is invalid, buffer is not a buffer
     bind_buffer(*target, buffer);
+
+    if (params.debug_label && GLAD_GL_KHR_debug) {
+        glObjectLabel(GL_BUFFER, buffer, -1, params.debug_label);
+        if (const auto error = glGetError()) {
+            log_error("Error in glObjectLabel: %s", gl_error_string(error));
+        }
+    }
+
     glBufferData(*target, params.data.length, params.data.data, *usage);
     if (const auto error = glGetError()) {
         log_error("Error in glBufferData: %s", gl_error_string(error));
@@ -1549,6 +1579,7 @@ EXPORT mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create
         .target = MUGFX_BUFFER_TARGET_UNIFORM,
         .usage = get_buffer_usage(params.usage_hint),
         .data = { .data = params.cpu_buffer, .length = params.size },
+        .debug_label = params.debug_label,
     });
     const mugfx_range buffer_range = { .offset = 0, .length = params.size };
 
@@ -1779,6 +1810,14 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
     // Errors: invalid vao
     glBindVertexArray(geom.vao);
 
+    // The VAO is not created until it is bound, glGenVertexArrays just reserves a name
+    if (params.debug_label && GLAD_GL_KHR_debug) {
+        glObjectLabel(GL_VERTEX_ARRAY, geom.vao, -1, params.debug_label);
+        if (const auto error = glGetError()) {
+            log_error("Error in glObjectLabel: %s", gl_error_string(error));
+        }
+    }
+
     for (size_t b = 0; b < MUGFX_MAX_VERTEX_BUFFERS; ++b) {
         if (!vbufs[b]) {
             break;
@@ -1958,6 +1997,14 @@ EXPORT mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_cre
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    // The FBO is not created until it is bound, glGenFramebuffers just reserves the name
+    if (params.debug_label && GLAD_GL_KHR_debug) {
+        glObjectLabel(GL_FRAMEBUFFER, fbo, -1, params.debug_label);
+        if (const auto err = glGetError()) {
+            log_warn("glObjectLabel failed: %s", gl_error_string(err));
+        }
+    }
 
     RenderTarget rt = {
         .fbo = fbo,
@@ -2202,6 +2249,18 @@ EXPORT void mugfx_set_scissor(int x, int y, size_t width, size_t height)
 {
     set_enabled(GL_SCISSOR_TEST, true);
     glScissor(x, y, (GLsizei)width, (GLsizei)height);
+}
+
+EXPORT void mugfx_debug_push(const char* label)
+{
+    glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, label);
+}
+
+EXPORT void mugfx_debug_pop()
+{
+    if (GLAD_GL_KHR_debug) {
+        glPopDebugGroup();
+    }
 }
 
 EXPORT const mugfx_frame_stats* mugfx_get_frame_stats(void)

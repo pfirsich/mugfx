@@ -107,7 +107,3 @@ Just `add_subdirectory` this project with CMake and link against the `mugfx` tar
 * Compute Shaders
 * Queries?
 * Vulkan backend
-* Object Labels:
-    - https://www.khronos.org/opengl/wiki/Debug_Output#Scoping_messages
-    - https://www.khronos.org/opengl/wiki/Debug_Output#Object_names
-    - https://renderdoc.org/docs/how/how_annotate_capture.html

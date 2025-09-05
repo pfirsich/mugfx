@@ -123,6 +123,7 @@ typedef struct {
     mugfx_shader_stage stage;
     const char* source; // GLSL or SPIR-V
     mugfx_shader_binding bindings[MUGFX_MAX_SHADER_BINDINGS];
+    const char* debug_label;
 } mugfx_shader_create_params;
 
 mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params);
@@ -191,6 +192,7 @@ typedef struct {
     bool generate_mipmaps;
     mugfx_slice data; // maybe optionally be set at creation
     mugfx_pixel_format data_format; // default: format
+    const char* debug_label;
 } mugfx_texture_create_params;
 
 mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params);
@@ -289,6 +291,7 @@ typedef struct {
     mugfx_stencil_func stencil_func; // default: ALWAYS
     int stencil_ref;
     uint32_t stencil_mask;
+    const char* debug_label;
 } mugfx_material_create_params;
 
 mugfx_material_id mugfx_material_create(mugfx_material_create_params params);
@@ -317,6 +320,7 @@ typedef struct {
     mugfx_buffer_target target; // default: ARRAY
     mugfx_buffer_usage_hint usage; // default: STATIC
     mugfx_slice data; // optional initial data, length must be set
+    const char* debug_label;
 } mugfx_buffer_create_params;
 
 mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params);
@@ -345,6 +349,7 @@ typedef struct {
     // cpu_buffer must live as long as the uniform buffer itself, if given.
     // It's length must be >= size
     void* cpu_buffer; // optional, will be allocated otherwise
+    const char* debug_label;
 } mugfx_uniform_data_create_params;
 
 // This is essentially a cpu buffer and a dirty flag, plus a reference to a pool of gpu uniform
@@ -424,6 +429,7 @@ typedef struct {
     size_t index_buffer_offset;
     size_t vertex_count;
     size_t index_count;
+    const char* debug_label;
 } mugfx_geometry_create_params;
 
 // This represents the vertex input state of the pipeline
@@ -449,6 +455,7 @@ typedef struct {
     mugfx_render_target_attachment color[MUGFX_MAX_COLOR_FORMATS];
     mugfx_render_target_attachment depth;
     size_t samples;
+    const char* debug_label;
 } mugfx_render_target_create_params;
 
 #define MUGFX_RENDER_TARGET_BACKBUFFER (mugfx_render_target_id) { 0 }
@@ -465,6 +472,10 @@ void mugfx_render_target_destroy(mugfx_render_target_id target);
 // Dynamic Pipeline State
 void mugfx_set_viewport(int x, int y, size_t width, size_t height);
 void mugfx_set_scissor(int x, int y, size_t width, size_t height); // no way to unset yet!
+
+// Debug
+void mugfx_debug_push(const char* label);
+void mugfx_debug_pop();
 
 // Statistics
 typedef struct {
