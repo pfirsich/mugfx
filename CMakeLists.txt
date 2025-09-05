@@ -43,7 +43,7 @@ set_wall(mugfx)
 
 if(MUGFX_BACKEND STREQUAL OpenGL)
   target_compile_definitions(mugfx PRIVATE MUGFX_OPENGL)
-  target_link_libraries(mugfx PRIVATE glad)
+  target_link_libraries(mugfx PUBLIC glad)
 endif()
 
 if(MUGFX_BACKEND STREQUAL WebGL)
