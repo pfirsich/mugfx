@@ -39,7 +39,7 @@ endif()
 add_library(mugfx STATIC ${MUGFX_SRC})
 target_include_directories(mugfx PUBLIC "include/")
 target_compile_options(mugfx PUBLIC -Wno-unused-parameter)
-set_wall(mugfx)
+mugfx_set_wall(mugfx)
 
 if(MUGFX_BACKEND STREQUAL OpenGL)
   target_compile_definitions(mugfx PRIVATE MUGFX_OPENGL)
