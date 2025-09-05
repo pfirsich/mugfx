@@ -253,56 +253,6 @@ static std::optional<GLenum> gl_depth_func(mugfx_depth_func func)
     }
 }
 
-static void set_enabled(GLenum cap, bool value)
-{
-    if (value) {
-        glEnable(cap);
-    } else {
-        glDisable(cap);
-    }
-}
-
-static void set_depth_write(bool depth_write)
-{
-    static bool current_write = true;
-
-    if (current_write != depth_write) {
-        glDepthMask(depth_write ? GL_TRUE : GL_FALSE);
-        current_write = depth_write;
-    }
-}
-
-static bool set_depth(GLenum depth_func, bool depth_write)
-{
-    static bool current_enabled = false;
-    static GLenum current_func = GL_LESS;
-
-    // No test (GL_ALWAYS) and no writes is equivalent to disabling depth testing
-    const auto enabled = depth_func != GL_ALWAYS || depth_write;
-    if (current_enabled != enabled) {
-        set_enabled(GL_DEPTH_TEST, enabled);
-        current_enabled = enabled;
-    }
-
-    if (!enabled) {
-        // Ignore the rest of the state
-        return true;
-    }
-
-    if (current_func != depth_func) {
-        glDepthFunc(depth_func);
-        if (const auto error = glGetError()) {
-            log_error("Error in glDepthFunc: %s", gl_error_string(error));
-            return false;
-        }
-        current_func = depth_func;
-    }
-
-    set_depth_write(depth_write);
-
-    return true;
-}
-
 struct WriteMask {
     bool r;
     bool g;
@@ -328,22 +278,6 @@ static std::optional<WriteMask> gl_write_mask(mugfx_write_mask mask)
     };
 }
 
-static void set_color_write_mask(const WriteMask& m)
-{
-    static bool current_r = true;
-    static bool current_g = true;
-    static bool current_b = true;
-    static bool current_a = true;
-
-    if (m.r != current_r || m.g != current_g || m.b != current_b || m.a != current_a) {
-        glColorMask(m.r, m.g, m.b, m.a);
-        current_r = m.r;
-        current_g = m.g;
-        current_b = m.b;
-        current_a = m.a;
-    }
-}
-
 static std::optional<GLenum> gl_cull_face_mode(mugfx_cull_face_mode mode)
 {
     switch (mode) {
@@ -357,21 +291,6 @@ static std::optional<GLenum> gl_cull_face_mode(mugfx_cull_face_mode mode)
         return GL_FRONT_AND_BACK;
     default:
         return std::nullopt;
-    }
-}
-
-static void set_cull_face(GLenum cull_face)
-{
-    static GLenum current_cull_face = GL_NONE;
-
-    if (current_cull_face != cull_face) {
-        if (cull_face == GL_NONE) {
-            glDisable(GL_CULL_FACE);
-        } else {
-            glEnable(GL_CULL_FACE);
-            glCullFace(cull_face);
-        }
-        current_cull_face = cull_face;
     }
 }
 
@@ -403,63 +322,6 @@ static std::optional<GLenum> gl_blend_func(mugfx_blend_func func)
     }
 }
 
-static void set_blend_mode(GLenum src, GLenum dst, float color[4])
-{
-    static bool current_enabled = false;
-    static GLenum current_src = GL_ONE;
-    static GLenum current_dst = GL_ZERO;
-    static float current_color[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-    const auto blend_enabled = src != GL_ONE || dst != GL_ZERO;
-
-    if (current_enabled != blend_enabled) {
-        set_enabled(GL_BLEND, blend_enabled);
-        current_enabled = blend_enabled;
-    }
-
-    if (!blend_enabled) {
-        // Ignore the rest of the state
-        return;
-    }
-
-    if (current_src != src || current_dst != dst) {
-        glBlendFunc(src, dst);
-        current_src = src;
-        current_dst = dst;
-    }
-
-    if (std::memcmp(current_color, color, sizeof(float) * 4)) {
-        glBlendColor(color[0], color[1], color[2], color[3]);
-        std::memcpy(current_color, color, sizeof(float) * 4);
-    }
-}
-
-#ifndef MUGFX_WEBGL
-static std::optional<GLenum> gl_polygon_mode(mugfx_polygon_mode mode)
-{
-    switch (mode) {
-    case MUGFX_POLYGON_MODE_FILL:
-        return GL_FILL;
-    case MUGFX_POLYGON_MODE_LINE:
-        return GL_LINE;
-    case MUGFX_POLYGON_MODE_POINT:
-        return GL_POINT;
-    default:
-        return std::nullopt;
-    }
-}
-
-static void set_polygon_mode(GLenum mode)
-{
-    static GLenum current_mode = GL_FILL;
-
-    if (current_mode != mode) {
-        glPolygonMode(GL_FRONT_AND_BACK, mode);
-        current_mode = mode;
-    }
-}
-#endif
-
 static std::optional<GLenum> gl_stencil_func(mugfx_stencil_func func)
 {
     switch (func) {
@@ -481,31 +343,6 @@ static std::optional<GLenum> gl_stencil_func(mugfx_stencil_func func)
         return GL_ALWAYS;
     default:
         return std::nullopt;
-    }
-}
-
-static void set_stencil(bool enabled, GLenum func, int ref, uint32_t mask)
-{
-    static bool current_enabled = false;
-    static GLenum current_func = GL_ALWAYS;
-    static int current_ref = 0;
-    static uint32_t current_mask = 0xffff'ffff;
-
-    if (current_enabled != enabled) {
-        set_enabled(GL_STENCIL_TEST, enabled);
-        current_enabled = enabled;
-    }
-
-    if (!enabled) {
-        // Ignore the rest of the state
-        return;
-    }
-
-    if (current_func != func || current_ref != ref || current_mask != mask) {
-        glStencilFunc(func, ref, mask);
-        current_func = func;
-        current_ref = ref;
-        current_mask = mask;
     }
 }
 
@@ -625,20 +462,6 @@ static std::optional<size_t> get_index_size(GLenum type)
     }
 }
 
-static bool bind_vao(GLuint vao)
-{
-    static GLuint current_vao = 0;
-    if (current_vao != vao) {
-        glBindVertexArray(vao);
-        if (const auto error = glGetError()) {
-            log_error("Error in glBindVertexArray: %s", gl_error_string(error));
-            return false;
-        }
-        current_vao = vao;
-    }
-    return true;
-}
-
 struct Shader {
     GLuint shader;
     std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> bindings;
@@ -706,6 +529,27 @@ struct Pass {
     bool in_pass = false;
 };
 
+struct GlState {
+    std::array<GLuint, 64> texture_2d = {};
+    GLuint program = 0;
+    std::array<GLuint, 3> buffers = {}; // see get_buffer_target_index
+    std::array<GLuint, 2> fbos = {}; // index is (int)FboTarget
+    bool depth_enabled = false;
+    GLenum depth_func = GL_LESS;
+    WriteMask write_mask = { true, true, true, true, true };
+    GLenum cull_face = GL_NONE;
+    bool blend_enabled = false;
+    GLenum blend_src = GL_ONE;
+    GLenum blend_dst = GL_ZERO;
+    float blend_color[4] = {};
+    GLenum polygon_mode = GL_FILL;
+    bool stencil_enabled = false;
+    GLenum stencil_func = GL_ALWAYS;
+    int stencil_ref = 0;
+    uint32_t stencil_mask = 0xffff'ffff;
+    GLuint vao;
+};
+
 struct State {
     Pool<Shader> shaders;
     Pool<Texture> textures;
@@ -717,20 +561,162 @@ struct State {
     mugfx_frame_stats cur_stats = {}, last_stats = {};
     mugfx_resource_stats res_stats = {};
     GLuint frame_time_query = 0;
+    GlState current_gl;
 };
 
 State* state = nullptr;
 
+static void set_enabled(GLenum cap, bool value)
+{
+    if (value) {
+        glEnable(cap);
+    } else {
+        glDisable(cap);
+    }
+}
+
+static void set_depth_write(bool depth_write)
+{
+    if (depth_write != state->current_gl.write_mask.depth) {
+        glDepthMask(depth_write ? GL_TRUE : GL_FALSE);
+        state->current_gl.write_mask.depth = depth_write;
+    }
+}
+
+static bool set_depth(GLenum depth_func, bool depth_write)
+{
+    // No test (GL_ALWAYS) and no writes is equivalent to disabling depth testing
+    const auto enabled = depth_func != GL_ALWAYS || depth_write;
+    if (enabled != state->current_gl.depth_enabled) {
+        set_enabled(GL_DEPTH_TEST, enabled);
+        state->current_gl.depth_enabled = enabled;
+    }
+
+    if (!enabled) {
+        // Ignore the rest of the state
+        return true;
+    }
+
+    if (depth_func != state->current_gl.depth_func) {
+        glDepthFunc(depth_func);
+        if (const auto error = glGetError()) {
+            log_error("Error in glDepthFunc: %s", gl_error_string(error));
+            return false;
+        }
+        state->current_gl.depth_func = depth_func;
+    }
+
+    set_depth_write(depth_write);
+
+    return true;
+}
+
+static void set_color_write_mask(const WriteMask& m)
+{
+    auto& cur = state->current_gl.write_mask;
+    if (m.r != cur.r || m.g != cur.g || m.b != cur.b || m.a != cur.a) {
+        glColorMask(m.r, m.g, m.b, m.a);
+        cur.r = m.r;
+        cur.g = m.g;
+        cur.b = m.b;
+        cur.a = m.a;
+    }
+}
+
+static void set_cull_face(GLenum cull_face)
+{
+    if (cull_face != state->current_gl.cull_face) {
+        if (cull_face == GL_NONE) {
+            glDisable(GL_CULL_FACE);
+        } else {
+            glEnable(GL_CULL_FACE);
+            glCullFace(cull_face);
+        }
+        state->current_gl.cull_face = cull_face;
+    }
+}
+
+static void set_blend_mode(GLenum src, GLenum dst, float color[4])
+{
+    const auto blend_enabled = src != GL_ONE || dst != GL_ZERO;
+
+    if (blend_enabled != state->current_gl.blend_enabled) {
+        set_enabled(GL_BLEND, blend_enabled);
+        state->current_gl.blend_enabled = blend_enabled;
+    }
+
+    if (!blend_enabled) {
+        // Ignore the rest of the state
+        return;
+    }
+
+    if (src != state->current_gl.blend_src || dst != state->current_gl.blend_dst) {
+        glBlendFunc(src, dst);
+        state->current_gl.blend_src = src;
+        state->current_gl.blend_dst = dst;
+    }
+
+    if (std::memcmp(color, state->current_gl.blend_color, sizeof(float) * 4)) {
+        glBlendColor(color[0], color[1], color[2], color[3]);
+        std::memcpy(state->current_gl.blend_color, color, sizeof(float) * 4);
+    }
+}
+
+#ifndef MUGFX_WEBGL
+static std::optional<GLenum> gl_polygon_mode(mugfx_polygon_mode mode)
+{
+    switch (mode) {
+    case MUGFX_POLYGON_MODE_FILL:
+        return GL_FILL;
+    case MUGFX_POLYGON_MODE_LINE:
+        return GL_LINE;
+    case MUGFX_POLYGON_MODE_POINT:
+        return GL_POINT;
+    default:
+        return std::nullopt;
+    }
+}
+
+static void set_polygon_mode(GLenum mode)
+{
+    if (mode != state->current_gl.polygon_mode) {
+        glPolygonMode(GL_FRONT_AND_BACK, mode);
+        state->current_gl.polygon_mode = mode;
+    }
+}
+#endif
+
+static void set_stencil(bool enabled, GLenum func, int ref, uint32_t mask)
+{
+    if (enabled != state->current_gl.stencil_enabled) {
+        set_enabled(GL_STENCIL_TEST, enabled);
+        state->current_gl.stencil_enabled = enabled;
+    }
+
+    if (!enabled) {
+        // Ignore the rest of the state
+        return;
+    }
+
+    if (func != state->current_gl.stencil_func || ref != state->current_gl.stencil_ref
+        || mask != state->current_gl.stencil_mask) {
+        glStencilFunc(func, ref, mask);
+        state->current_gl.stencil_func = func;
+        state->current_gl.stencil_ref = ref;
+        state->current_gl.stencil_mask = mask;
+    }
+}
+
 static bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
 {
     // TODO: Save this per target!
-    static std::array<GLuint, 64> current_texture_2d = {};
     if (target == GL_TEXTURE_2D) {
-        if (unit >= current_texture_2d.size()) {
-            log_error("Texture unit must be in [0, %lu]", current_texture_2d.size());
+        auto& cur = state->current_gl.texture_2d;
+        if (unit >= cur.size()) {
+            log_error("Texture unit must be in [0, %lu]", cur.size());
             return false;
         }
-        if (texture != current_texture_2d[unit]) {
+        if (texture != cur[unit]) {
             state->cur_stats.texture_binds++;
             glActiveTexture(GL_TEXTURE0 + unit);
             glBindTexture(target, texture);
@@ -738,7 +724,7 @@ static bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
                 log_error("Error binding texture %d: %s", texture, gl_error_string(error));
                 return false;
             }
-            current_texture_2d[unit] = texture;
+            cur[unit] = texture;
         }
     } else {
         log_error("Invalid texture target %d", target);
@@ -747,17 +733,29 @@ static bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
     return true;
 }
 
+static bool bind_vao(GLuint vao)
+{
+    if (vao != state->current_gl.vao) {
+        glBindVertexArray(vao);
+        if (const auto error = glGetError()) {
+            log_error("Error in glBindVertexArray: %s", gl_error_string(error));
+            return false;
+        }
+        state->current_gl.vao = vao;
+    }
+    return true;
+}
+
 static bool bind_shader(GLuint program)
 {
-    static GLuint current_program = 0;
-    if (current_program != program) {
+    if (program != state->current_gl.program) {
         state->cur_stats.shader_switches++;
         glUseProgram(program);
         if (const auto error = glGetError()) {
             log_error("Error in glUseProgram: %s", gl_error_string(error));
             return false;
         }
-        current_program = program;
+        state->current_gl.program = program;
     }
     return true;
 }
@@ -775,9 +773,8 @@ static bool bind_buffer_nocache(GLenum target, GLuint buffer)
 
 static bool bind_buffer(GLenum target, GLuint buffer)
 {
-    static std::array<GLuint, 3> current_buffers = {};
-    auto& current_buffer = current_buffers.at(get_buffer_target_index(target));
-    if (current_buffer != buffer) {
+    auto& current_buffer = state->current_gl.buffers.at(get_buffer_target_index(target));
+    if (buffer != current_buffer) {
         bind_buffer_nocache(target, buffer);
         current_buffer = buffer;
     }
