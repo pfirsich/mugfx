@@ -80,6 +80,10 @@ Window Window::create(const char* title, size_t width, size_t height)
     return Window(std::move(impl));
 }
 
+Window::Window() = default;
+
+Window& Window::operator=(Window&& other) = default;
+
 Window::~Window() = default;
 
 bool Window::poll_events() const
@@ -91,6 +95,13 @@ bool Window::poll_events() const
         }
     }
     return true;
+}
+
+float Window::get_time() const
+{
+    static const auto start = SDL_GetPerformanceCounter();
+    const auto now = SDL_GetPerformanceCounter();
+    return (float)(now - start) / (float)SDL_GetPerformanceFrequency();
 }
 
 void Window::swap() const
