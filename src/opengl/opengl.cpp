@@ -1853,7 +1853,11 @@ EXPORT void mugfx_set_viewport(int x, int y, size_t width, size_t height)
     glViewport(x, y, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
 }
 
-EXPORT void mugfx_set_scissor(int x, int y, size_t width, size_t height) { }
+EXPORT void mugfx_set_scissor(int x, int y, size_t width, size_t height)
+{
+    set_enabled(GL_SCISSOR_TEST, true);
+    glScissor(x, y, (GLsizei)width, (GLsizei)height);
+}
 
 EXPORT const mugfx_frame_stats* mugfx_get_frame_stats(void)
 {

@@ -456,7 +456,7 @@ void mugfx_render_target_destroy(mugfx_render_target_id target);
 
 // Dynamic Pipeline State
 void mugfx_set_viewport(int x, int y, size_t width, size_t height);
-void mugfx_set_scissor(int x, int y, size_t width, size_t height);
+void mugfx_set_scissor(int x, int y, size_t width, size_t height); // no way to unset yet!
 
 // Statistics
 typedef struct {
