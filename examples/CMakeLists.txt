@@ -2,6 +2,10 @@ add_executable(hello_triangle hello_triangle.cpp window.cpp)
 target_link_libraries(hello_triangle PRIVATE mugfx)
 target_compile_definitions(hello_triangle PUBLIC SDL_MAIN_HANDLED) # don't override main()
 
+add_executable(render_targets render_targets.cpp window.cpp)
+target_link_libraries(render_targets PRIVATE mugfx)
+target_compile_definitions(render_targets PUBLIC SDL_MAIN_HANDLED) # don't override main()
+
 if(NOT EMSCRIPTEN)
   include(../cmake/CPM.cmake)
 
@@ -13,6 +17,7 @@ if(NOT EMSCRIPTEN)
   )
 
   target_link_libraries(hello_triangle PUBLIC SDL2::SDL2)
+  target_link_libraries(render_targets PUBLIC SDL2::SDL2)
 else()
   # USE_SDL is both a compile and link flag!
   target_compile_options(hello_triangle PRIVATE
