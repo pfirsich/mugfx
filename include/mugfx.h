@@ -82,11 +82,8 @@ typedef struct {
     size_t length;
 } mugfx_slice;
 
-#define MUGFX_SLICE_OBJ(obj)                                                                       \
-    (mugfx_slice)                                                                                  \
-    {                                                                                              \
-        .data = &obj, .length = sizeof(obj)                                                        \
-    }
+#define MUGFX_SLICE_OBJ(obj) { .data = &obj, .length = sizeof(obj) }
+#define MUGFX_SLICE(ptr, count) { .data = (p), .length = count * sizeof(*(ptr)) }
 
 typedef struct {
     size_t offset;
@@ -458,7 +455,7 @@ typedef struct {
     const char* debug_label;
 } mugfx_render_target_create_params;
 
-#define MUGFX_RENDER_TARGET_BACKBUFFER (mugfx_render_target_id) { 0 }
+#define MUGFX_RENDER_TARGET_BACKBUFFER { 0 }
 
 mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_create_params params);
 void mugfx_render_target_get_size(mugfx_render_target_id target, size_t* width, size_t* height);
@@ -570,8 +567,7 @@ typedef struct {
     int stencil;
 } mugfx_clear_values;
 
-#define MUGFX_CLEAR_DEFAULT                                                                        \
-    (mugfx_clear_values) { .color = { 0.0f, 0.0f, 0.0f, 1.0f }, .depth = 1.0f, .stencil = 0 }
+#define MUGFX_CLEAR_DEFAULT { .color = { 0.0f, 0.0f, 0.0f, 1.0f }, .depth = 1.0f, .stencil = 0 }
 
 void mugfx_begin_frame();
 void mugfx_begin_pass(mugfx_render_target_id target);
