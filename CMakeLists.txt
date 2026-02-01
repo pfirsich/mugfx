@@ -28,7 +28,7 @@ if(MUGFX_BACKEND STREQUAL OpenGL)
   list(APPEND MUGFX_SRC "src/opengl/opengl.cpp")
 
   add_library(glad "src/opengl/glad/src/gl.c")
-  target_include_directories(glad SYSTEM PRIVATE "src/opengl/glad/include")
+  target_include_directories(glad SYSTEM PUBLIC "src/opengl/glad/include")
   target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
 endif()
 

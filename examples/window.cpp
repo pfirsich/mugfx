@@ -2,7 +2,7 @@
 
 #include <cstdio>
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 struct Window::Impl {
     bool init(const char* title, size_t width, size_t height)
