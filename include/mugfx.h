@@ -392,14 +392,14 @@ typedef struct {
     size_t location;
     size_t components;
     mugfx_vertex_attribute_type type;
-    size_t offset;
+    size_t offset; // calculated if not given
     mugfx_vertex_attribute_rate rate;
 } mugfx_vertex_attribute;
 
 typedef struct {
     mugfx_buffer_id buffer;
     size_t buffer_offset;
-    size_t stride;
+    size_t stride; // will be calculated if not given
     mugfx_vertex_attribute attributes[MUGFX_MAX_VERTEX_ATTRIBUTES];
 } mugfx_vertex_buffer;
 
