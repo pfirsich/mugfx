@@ -47,14 +47,14 @@ typedef struct {
     mugfx_logging_callback logging_callback;
     mugfx_panic_handler panic_handler; // if set, mugfx will panic on error
     mugfx_allocator* allocator; // default will use malloc
-    size_t max_num_shaders; // default: 64
-    size_t max_num_textures; // default: 128
-    size_t max_num_uniforms; // default: 1024
-    size_t max_num_buffers; // default: 1024
-    size_t max_num_materials; // default: 512
-    size_t max_num_geometries; // default: 1024
-    size_t max_num_render_targets; // default: 32
-    size_t max_num_pipelines; // default: 1024
+    uint32_t max_num_shaders; // default: 64
+    uint32_t max_num_textures; // default: 128
+    uint32_t max_num_uniforms; // default: 1024
+    uint32_t max_num_buffers; // default: 1024
+    uint32_t max_num_materials; // default: 512
+    uint32_t max_num_geometries; // default: 1024
+    uint32_t max_num_render_targets; // default: 32
+    uint32_t max_num_pipelines; // default: 1024
 #ifdef MUGFX_OPENGL
     // We don't need anything here. Just create a context and make it current
 #elif MUGFX_WEBGL
@@ -124,7 +124,7 @@ typedef struct {
 } mugfx_shader_create_params;
 
 mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params);
-mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader, size_t idx);
+mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader, uint32_t idx);
 void mugfx_shader_destroy(mugfx_shader_id shader);
 
 // Texture
@@ -177,9 +177,9 @@ typedef enum {
 } mugfx_texture_mag_filter;
 
 typedef struct {
-    size_t width;
-    size_t height;
-    // int depth; // default: 0 (2D texture) // TODO: 3D Textures, Cubemaps
+    uint32_t width;
+    uint32_t height;
+    // uint32_t depth; // default: 0 (2D texture) // TODO: 3D Textures, Cubemaps
     mugfx_pixel_format format; // default: RGBA8
     mugfx_texture_wrap_mode wrap_s; // default: REPEAT
     mugfx_texture_wrap_mode wrap_t; // default: wrap_s
@@ -286,7 +286,7 @@ typedef struct {
 #endif
     bool stencil_enable;
     mugfx_stencil_func stencil_func; // default: ALWAYS
-    int stencil_ref;
+    uint32_t stencil_ref;
     uint32_t stencil_mask;
     const char* debug_label;
 } mugfx_material_create_params;
@@ -389,8 +389,8 @@ typedef enum {
 
 // Try to align each attribute to at least 4 bytes
 typedef struct {
-    size_t location;
-    size_t components;
+    uint32_t location;
+    uint8_t components;
     mugfx_vertex_attribute_type type;
     size_t offset; // calculated if not given
     mugfx_vertex_attribute_rate rate;
@@ -424,15 +424,15 @@ typedef struct {
     mugfx_buffer_id index_buffer; // optional
     mugfx_index_type index_type; // mandatory if index_buffer is given
     size_t index_buffer_offset;
-    size_t vertex_count;
-    size_t index_count;
+    uint32_t vertex_count;
+    uint32_t index_count;
     const char* debug_label;
 } mugfx_geometry_create_params;
 
 // This represents the vertex input state of the pipeline
 mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params params);
-void mugfx_geometry_set_vertex_range(mugfx_geometry_id geometry, size_t offset, size_t count);
-void mugfx_geometry_set_index_range(mugfx_geometry_id geometry, size_t offset, size_t count);
+void mugfx_geometry_set_vertex_range(mugfx_geometry_id geometry, uint32_t offset, uint32_t count);
+void mugfx_geometry_set_index_range(mugfx_geometry_id geometry, uint32_t offset, uint32_t count);
 void mugfx_geometry_destroy(mugfx_geometry_id geometry);
 
 // Render Target
@@ -446,29 +446,29 @@ typedef struct {
 } mugfx_render_target_attachment;
 
 typedef struct {
-    size_t width;
-    size_t height;
+    uint32_t width;
+    uint32_t height;
     // For these format = 0 means no attachment
     mugfx_render_target_attachment color[MUGFX_MAX_COLOR_FORMATS];
     mugfx_render_target_attachment depth;
-    size_t samples;
+    uint8_t samples;
     const char* debug_label;
 } mugfx_render_target_create_params;
 
 #define MUGFX_RENDER_TARGET_BACKBUFFER { 0 }
 
 mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_create_params params);
-void mugfx_render_target_get_size(mugfx_render_target_id target, size_t* width, size_t* height);
+void mugfx_render_target_get_size(mugfx_render_target_id target, uint32_t* width, uint32_t* height);
 mugfx_texture_id mugfx_render_target_get_color_texture(
-    mugfx_render_target_id target, size_t color_index);
+    mugfx_render_target_id target, uint32_t color_index);
 mugfx_texture_id mugfx_render_target_get_depth_texture(mugfx_render_target_id target);
 void mugfx_render_target_blit_to_render_target(
     mugfx_render_target_id src_target, mugfx_render_target_id dst_target);
 void mugfx_render_target_destroy(mugfx_render_target_id target);
 
 // Dynamic Pipeline State
-void mugfx_set_viewport(int x, int y, size_t width, size_t height);
-void mugfx_set_scissor(int x, int y, size_t width, size_t height); // no way to unset yet!
+void mugfx_set_viewport(int32_t x, int32_t y, uint32_t width, uint32_t height);
+void mugfx_set_scissor(int32_t x, int32_t y, uint32_t width, uint32_t height); // no way to unset yet!
 
 // Debug
 void mugfx_debug_push(const char* label);
@@ -505,15 +505,15 @@ typedef struct {
 const mugfx_frame_stats* mugfx_get_frame_stats(void);
 
 typedef struct {
-    size_t textures_alive;
-    size_t buffers_alive;
-    size_t shaders_alive;
-    size_t materials_alive;
-    size_t geometries_alive;
-    size_t render_targets_alive;
+    uint32_t textures_alive;
+    uint32_t buffers_alive;
+    uint32_t shaders_alive;
+    uint32_t materials_alive;
+    uint32_t geometries_alive;
+    uint32_t render_targets_alive;
 
-    uint64_t texture_bytes; // estimated as width*height*bytes_per_texel
-    uint64_t buffer_bytes;
+    size_t texture_bytes; // estimated as width*height*bytes_per_texel
+    size_t buffer_bytes;
 } mugfx_resource_stats;
 
 // Returns a pointer to a single (non-double-buffered) struct.
@@ -564,7 +564,7 @@ typedef enum {
 typedef struct {
     float color[4];
     float depth;
-    int stencil;
+    uint32_t stencil;
 } mugfx_clear_values;
 
 #define MUGFX_CLEAR_DEFAULT { .color = { 0.0f, 0.0f, 0.0f, 1.0f }, .depth = 1.0f, .stencil = 0 }
@@ -577,7 +577,7 @@ void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values);
 void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
     mugfx_draw_binding* bindings, size_t num_bindings);
 void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id geometry,
-    mugfx_draw_binding* bindings, size_t num_bindings, size_t instance_count);
+    mugfx_draw_binding* bindings, size_t num_bindings, uint32_t instance_count);
 
 void mugfx_flush();
 void mugfx_end_pass(); // flushes

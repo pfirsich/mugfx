@@ -476,9 +476,9 @@ struct Shader {
 struct Texture {
     GLenum target;
     GLuint texture;
-    size_t width;
-    size_t height;
-    uint64_t size_bytes;
+    uint32_t width;
+    uint32_t height;
+    size_t size_bytes;
 };
 
 struct Material {
@@ -496,7 +496,7 @@ struct Material {
 #endif
     bool stencil_enable;
     GLenum stencil_func;
-    int stencil_ref;
+    uint32_t stencil_ref;
     uint32_t stencil_mask;
     std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> frag_bindings = {};
     std::array<mugfx_shader_binding, MUGFX_MAX_SHADER_BINDINGS> vert_bindings = {};
@@ -538,7 +538,7 @@ struct RenderTargetAttachment {
 
 struct RenderTarget {
     GLuint fbo;
-    size_t width, height;
+    uint32_t width, height;
     std::array<RenderTargetAttachment, MUGFX_MAX_COLOR_FORMATS> color = {};
     RenderTargetAttachment depth = {};
 };
@@ -552,7 +552,7 @@ struct GlState {
     std::array<GLuint, 64> texture_2d = {};
     GLuint program = 0;
     std::array<GLuint, 3> buffers = {}; // see get_buffer_target_index
-    std::array<GLuint, 2> fbos = {}; // index is (int)FboTarget
+    std::array<GLuint, 2> fbos = {}; // index is (size_t)FboTarget
     bool depth_enabled = false;
     GLenum depth_func = GL_LESS;
     WriteMask write_mask = { true, true, true, true, true };
@@ -564,9 +564,14 @@ struct GlState {
     GLenum polygon_mode = GL_FILL;
     bool stencil_enabled = false;
     GLenum stencil_func = GL_ALWAYS;
-    int stencil_ref = 0;
+    uint32_t stencil_ref = 0;
     uint32_t stencil_mask = 0xffff'ffff;
     GLuint vao;
+};
+
+struct Viewport {
+    int32_t x, y;
+    uint32_t w, h;
 };
 
 struct State {
@@ -582,7 +587,7 @@ struct State {
     mugfx_resource_stats res_stats = {};
     GLuint frame_time_query = 0;
     GlState current_gl;
-    std::array<int, 4> backbuffer_viewport = {};
+    Viewport backbuffer_viewport = {};
 };
 
 State* state = nullptr;
@@ -707,7 +712,7 @@ static void set_polygon_mode(GLenum mode)
 }
 #endif
 
-static void set_stencil(bool enabled, GLenum func, int ref, uint32_t mask)
+static void set_stencil(bool enabled, GLenum func, uint32_t ref, uint32_t mask)
 {
     if (enabled != state->current_gl.stencil_enabled) {
         set_enabled(GL_STENCIL_TEST, enabled);
@@ -721,7 +726,7 @@ static void set_stencil(bool enabled, GLenum func, int ref, uint32_t mask)
 
     if (func != state->current_gl.stencil_func || ref != state->current_gl.stencil_ref
         || mask != state->current_gl.stencil_mask) {
-        glStencilFunc(func, ref, mask);
+        glStencilFunc(func, (GLint)ref, (GLuint)mask);
         state->current_gl.stencil_func = func;
         state->current_gl.stencil_ref = ref;
         state->current_gl.stencil_mask = mask;
@@ -822,10 +827,10 @@ enum class FboTarget { Read = 0, Draw };
 static bool bind_fbo(FboTarget target, GLuint fbo)
 {
     static GLenum gl_targets[] = { GL_READ_FRAMEBUFFER, GL_DRAW_FRAMEBUFFER };
-    auto& current_fbo = state->current_gl.fbos.at((int)target);
+    auto& current_fbo = state->current_gl.fbos.at((size_t)target);
     if (fbo != current_fbo) {
         state->cur_stats.render_target_switches++;
-        glBindFramebuffer(gl_targets[(int)target], fbo);
+        glBindFramebuffer(gl_targets[(size_t)target], fbo);
         if (const auto error = glGetError()) {
             log_error("Error in glBindFramebuffer: %s", gl_error_string(error));
             return false;
@@ -844,13 +849,13 @@ EXPORT void mugfx_init(mugfx_init_params params)
 #endif
     assert(!state);
     state = allocate<State>(1);
-    state->shaders.init(params.max_num_shaders);
-    state->textures.init(params.max_num_textures);
-    state->materials.init(params.max_num_materials);
-    state->buffers.init(params.max_num_buffers);
-    state->uniform_data.init(params.max_num_uniforms);
-    state->geometries.init(params.max_num_geometries);
-    state->render_targets.init(params.max_num_render_targets);
+    state->shaders.init((size_t)params.max_num_shaders);
+    state->textures.init((size_t)params.max_num_textures);
+    state->materials.init((size_t)params.max_num_materials);
+    state->buffers.init((size_t)params.max_num_buffers);
+    state->uniform_data.init((size_t)params.max_num_uniforms);
+    state->geometries.init((size_t)params.max_num_geometries);
+    state->render_targets.init((size_t)params.max_num_render_targets);
 
     glGenQueries(1, &state->frame_time_query);
 }
@@ -1030,7 +1035,7 @@ EXPORT mugfx_shader_id mugfx_shader_create(mugfx_shader_create_params params)
     return { key };
 }
 
-EXPORT mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader_id, size_t idx)
+EXPORT mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader_id, uint32_t idx)
 {
     const auto shader = state->shaders.get(shader_id.id);
     if (!shader) {
@@ -1040,7 +1045,7 @@ EXPORT mugfx_shader_binding mugfx_shader_get_binding(mugfx_shader_id shader_id, 
     if (idx >= MUGFX_MAX_SHADER_BINDINGS) {
         return {};
     }
-    return shader->bindings[idx];
+    return shader->bindings[(size_t)idx];
 }
 
 EXPORT void mugfx_shader_destroy(mugfx_shader_id shader_id)
@@ -1107,14 +1112,14 @@ static size_t get_size_per_texel(mugfx_pixel_format fmt)
     }
 }
 
-static uint64_t estimate_texture_size(mugfx_pixel_format fmt, size_t w, size_t h, bool mips)
+static size_t estimate_texture_size(mugfx_pixel_format fmt, uint32_t w, uint32_t h, bool mips)
 {
     const auto bpt = get_size_per_texel(fmt);
     if (bpt == 0) {
         return 0;
     }
 
-    uint64_t size = w * h * bpt;
+    size_t size = w * h * bpt;
 
     if (mips) {
         while (w > 1 || h > 1) {
@@ -1204,8 +1209,8 @@ EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
         return error_return();
     }
 
-    glTexImage2D(target, 0, *internal_format, params.width, params.height, 0, data_format->format,
-        data_format->data_type, params.data.data);
+    glTexImage2D(target, 0, *internal_format, (GLsizei)params.width, (GLsizei)params.height, 0,
+        data_format->format, data_format->data_type, params.data.data);
     if (const auto error = glGetError()) {
         log_error("Error setting mag filter: %s", gl_error_string(error));
         return error_return();
@@ -1255,8 +1260,8 @@ EXPORT void mugfx_texture_set_data(
     state->cur_stats.texture_uploads++;
     state->cur_stats.texture_upload_bytes += data.length;
 
-    glTexSubImage2D(
-        tex->target, 0, 0, 0, tex->width, tex->height, df->format, df->data_type, data.data);
+    glTexSubImage2D(tex->target, 0, 0, 0, (GLsizei)tex->width, (GLsizei)tex->height, df->format,
+        df->data_type, data.data);
 }
 
 EXPORT void mugfx_texture_get_size(mugfx_texture_id texture, uint32_t* width, uint32_t* height)
@@ -1266,8 +1271,8 @@ EXPORT void mugfx_texture_get_size(mugfx_texture_id texture, uint32_t* width, ui
         log_error("Texture ID %#10x does not exist", texture.id);
         return;
     }
-    *width = (uint32_t)tex->width;
-    *height = (uint32_t)tex->height;
+    *width = tex->width;
+    *height = tex->height;
 }
 
 EXPORT void mugfx_texture_destroy(mugfx_texture_id texture)
@@ -1878,19 +1883,21 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
     return { key };
 }
 
-EXPORT void mugfx_geometry_set_vertex_range(mugfx_geometry_id geometry, size_t offset, size_t count)
+EXPORT void mugfx_geometry_set_vertex_range(
+    mugfx_geometry_id geometry, uint32_t offset, uint32_t count)
 {
     const auto geom = state->geometries.get(geometry.id);
-    geom->vertex_offset = offset;
-    geom->vertex_count = count;
+    geom->vertex_offset = (GLsizei)offset;
+    geom->vertex_count = (GLsizei)count;
 }
 
-EXPORT void mugfx_geometry_set_index_range(mugfx_geometry_id geometry, size_t offset, size_t count)
+EXPORT void mugfx_geometry_set_index_range(
+    mugfx_geometry_id geometry, uint32_t offset, uint32_t count)
 {
     const auto geom = state->geometries.get(geometry.id);
     assert(geom->index_type > 0);
-    geom->index_offset = offset * get_index_size(geom->index_type).value();
-    geom->index_count = count;
+    geom->index_offset = (GLsizei)(offset * get_index_size(geom->index_type).value());
+    geom->index_count = (GLsizei)count;
 }
 
 EXPORT void mugfx_geometry_destroy(mugfx_geometry_id geometry)
@@ -1919,8 +1926,8 @@ static void destroy(RenderTargetAttachment& a)
     }
 }
 
-static bool init_attachment(RenderTargetAttachment& rt_att, size_t width, size_t height,
-    size_t samples, mugfx_pixel_format format, bool sampleable, GLenum attachment)
+static bool init_attachment(RenderTargetAttachment& rt_att, uint32_t width, uint32_t height,
+    uint8_t samples, mugfx_pixel_format format, bool sampleable, GLenum attachment)
 {
     const auto gl_format = gl_pixel_format(format);
     if (!gl_format) {
@@ -1963,9 +1970,10 @@ static bool init_attachment(RenderTargetAttachment& rt_att, size_t width, size_t
         glBindRenderbuffer(GL_RENDERBUFFER, rt_att.rbo);
 
         if (samples > 1) {
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, *gl_format, width, height);
+            glRenderbufferStorageMultisample(
+                GL_RENDERBUFFER, (GLsizei)samples, *gl_format, (GLsizei)width, (GLsizei)height);
         } else {
-            glRenderbufferStorage(GL_RENDERBUFFER, *gl_format, width, height);
+            glRenderbufferStorage(GL_RENDERBUFFER, *gl_format, (GLsizei)width, (GLsizei)height);
         }
         if (const auto err = glGetError()) {
             log_error("glRenderbufferStorage failed: %s", gl_error_string(err));
@@ -2008,8 +2016,8 @@ EXPORT mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_cre
 
     RenderTarget rt = {
         .fbo = fbo,
-        .width = (uint32_t)params.width,
-        .height = (uint32_t)params.height,
+        .width = params.width,
+        .height = params.height,
     };
 
     auto error_return = [&]() -> mugfx_render_target_id {
@@ -2089,7 +2097,7 @@ EXPORT mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_cre
 }
 
 EXPORT void mugfx_render_target_get_size(
-    mugfx_render_target_id target, size_t* width, size_t* height)
+    mugfx_render_target_id target, uint32_t* width, uint32_t* height)
 {
     const auto rt = state->render_targets.get(target.id);
     if (!rt) {
@@ -2105,14 +2113,14 @@ EXPORT void mugfx_render_target_get_size(
 }
 
 EXPORT mugfx_texture_id mugfx_render_target_get_color_texture(
-    mugfx_render_target_id target, size_t color_index)
+    mugfx_render_target_id target, uint32_t color_index)
 {
     const auto rt = state->render_targets.get(target.id);
     if (!rt) {
         log_error("Render target ID%#10x does not exist", target.id);
         return { 0 };
     }
-    return rt->color.at(color_index).texture;
+    return rt->color.at((size_t)color_index).texture;
 }
 
 EXPORT mugfx_texture_id mugfx_render_target_get_depth_texture(mugfx_render_target_id target)
@@ -2236,19 +2244,19 @@ EXPORT void mugfx_render_target_destroy(mugfx_render_target_id target)
     state->render_targets.remove(target.id);
 }
 
-EXPORT void mugfx_set_viewport(int x, int y, size_t width, size_t height)
+EXPORT void mugfx_set_viewport(int32_t x, int32_t y, uint32_t width, uint32_t height)
 {
-    const auto current_fbo = state->current_gl.fbos.at((int)FboTarget::Draw);
+    const auto current_fbo = state->current_gl.fbos.at((size_t)FboTarget::Draw);
     if (current_fbo == 0) {
-        state->backbuffer_viewport = { x, y, (int)width, (int)height };
+        state->backbuffer_viewport = { x, y, width, height };
     }
-    glViewport(x, y, (GLsizei)width, (GLsizei)height);
+    glViewport((GLint)x, (GLint)y, (GLsizei)width, (GLsizei)height);
 }
 
-EXPORT void mugfx_set_scissor(int x, int y, size_t width, size_t height)
+EXPORT void mugfx_set_scissor(int32_t x, int32_t y, uint32_t width, uint32_t height)
 {
     set_enabled(GL_SCISSOR_TEST, true);
-    glScissor(x, y, (GLsizei)width, (GLsizei)height);
+    glScissor((GLint)x, (GLint)y, (GLsizei)width, (GLsizei)height);
 }
 
 EXPORT void mugfx_debug_push(const char* label)
@@ -2298,11 +2306,11 @@ EXPORT void mugfx_begin_pass(mugfx_render_target_id target)
             return;
         }
         bind_fbo(FboTarget::Draw, rt->fbo);
-        glViewport(0, 0, rt->width, rt->height);
+        glViewport(0, 0, (GLsizei)rt->width, (GLsizei)rt->height);
     } else {
         bind_fbo(FboTarget::Draw, 0);
-        glViewport(state->backbuffer_viewport[0], state->backbuffer_viewport[1],
-            state->backbuffer_viewport[2], state->backbuffer_viewport[3]);
+        glViewport((GLint)state->backbuffer_viewport.x, (GLint)state->backbuffer_viewport.y,
+            (GLsizei)state->backbuffer_viewport.w, (GLsizei)state->backbuffer_viewport.h);
     }
 }
 
@@ -2320,7 +2328,7 @@ EXPORT void mugfx_clear(mugfx_clear_mask mask, mugfx_clear_values values)
         gl_mask |= GL_DEPTH_BUFFER_BIT;
     }
     if (mask & MUGFX_CLEAR_STENCIL) {
-        glClearStencil(values.stencil);
+        glClearStencil((GLint)values.stencil);
         gl_mask |= GL_STENCIL_BUFFER_BIT;
     }
     glClear(gl_mask);
@@ -2398,7 +2406,7 @@ static bool apply_bindings(mugfx_draw_binding* bindings, size_t num_bindings)
     return true;
 }
 
-static void update_draw_stats(Geometry* geom, size_t instance_count)
+static void update_draw_stats(Geometry* geom, uint32_t instance_count)
 {
     state->cur_stats.draw_calls++;
     state->cur_stats.instances_drawn += instance_count;
@@ -2422,7 +2430,7 @@ EXPORT void mugfx_draw(mugfx_material_id material, mugfx_geometry_id geometry,
 }
 
 EXPORT void mugfx_draw_instanced(mugfx_material_id material, mugfx_geometry_id geometry,
-    mugfx_draw_binding* bindings, size_t num_bindings, size_t instance_count)
+    mugfx_draw_binding* bindings, size_t num_bindings, uint32_t instance_count)
 {
     if (!state->current_pass.in_pass) {
         log_error("Cannot draw outside a pass");
