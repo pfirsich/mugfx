@@ -739,7 +739,7 @@ static bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
     if (target == GL_TEXTURE_2D) {
         auto& cur = state->current_gl.texture_2d;
         if (unit >= cur.size()) {
-            log_error("Texture unit must be in [0, %lu]", cur.size());
+            log_error("Texture unit must be in [0, %zu]", cur.size());
             return false;
         }
         if (texture != cur[unit]) {
@@ -2049,7 +2049,7 @@ EXPORT mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_cre
 
         if (!init_attachment(rt.color[i], params.width, params.height, params.samples,
                 params.color[i].format, params.color[i].sampleable, attachment)) {
-            log_error("Failed to create render target color attachment %lu", i);
+            log_error("Failed to create render target color attachment %zu", i);
             return error_return();
         }
 
