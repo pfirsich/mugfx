@@ -566,6 +566,7 @@ struct GlState {
     GLenum stencil_func = GL_ALWAYS;
     uint32_t stencil_ref = 0;
     uint32_t stencil_mask = 0xffff'ffff;
+    GLint unpack_alignment = 4;
     GLuint vao;
 };
 
@@ -1112,6 +1113,43 @@ static size_t get_size_per_texel(mugfx_pixel_format fmt)
     }
 }
 
+static GLint get_unpack_alignment(size_t row_bytes)
+{
+    if ((row_bytes & 7) == 0) {
+        return 8;
+    }
+    if ((row_bytes & 3) == 0) {
+        return 4;
+    }
+    if ((row_bytes & 1) == 0) {
+        return 2;
+    }
+    return 1;
+}
+
+static bool set_unpack_alignment(uint32_t texture_width, mugfx_pixel_format data_format)
+{
+    const auto bytes_per_texel = get_size_per_texel(data_format);
+    if (bytes_per_texel == 0) {
+        log_error("Invalid data format: %d", data_format);
+        return false;
+    }
+
+    const auto row_bytes = (size_t)texture_width * bytes_per_texel;
+    const auto alignment = get_unpack_alignment(row_bytes);
+
+    if (alignment != state->current_gl.unpack_alignment) {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
+        if (const auto error = glGetError()) {
+            log_error("Error setting unpack alignment: %s", gl_error_string(error));
+            return false;
+        }
+        state->current_gl.unpack_alignment = alignment;
+    }
+
+    return true;
+}
+
 static size_t estimate_texture_size(mugfx_pixel_format fmt, uint32_t w, uint32_t h, bool mips)
 {
     const auto bpt = get_size_per_texel(fmt);
@@ -1209,6 +1247,10 @@ EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
         return error_return();
     }
 
+    if (!set_unpack_alignment(params.width, params.data_format)) {
+        return error_return(); // already logged
+    }
+
     glTexImage2D(target, 0, *internal_format, (GLsizei)params.width, (GLsizei)params.height, 0,
         data_format->format, data_format->data_type, params.data.data);
     if (const auto error = glGetError()) {
@@ -1255,6 +1297,10 @@ EXPORT void mugfx_texture_set_data(
     if (!df) {
         log_error("Invalid data format: %d", data_format);
         return;
+    }
+
+    if (!set_unpack_alignment(tex->width, data_format)) {
+        return; // already logged
     }
 
     state->cur_stats.texture_uploads++;
