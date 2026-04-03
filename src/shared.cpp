@@ -155,6 +155,7 @@ void default_init(mugfx_init_params& params)
     set_default(params.max_num_geometries, 1024);
     set_default(params.max_num_render_targets, 32);
     set_default(params.max_num_pipelines, 1024);
+    set_default(params.backbuffer_color_space, MUGFX_COLOR_SPACE_SRGB);
 }
 
 void default_init(mugfx_shader_create_params&) { }

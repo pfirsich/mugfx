@@ -2,6 +2,7 @@
 #include <cassert>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string_view>
 
 using namespace std::string_view_literals;
@@ -568,6 +569,7 @@ struct GlState {
     uint32_t stencil_mask = 0xffff'ffff;
     GLint unpack_alignment = 4;
     GLuint vao;
+    bool framebufer_srgb_enabled = false;
 };
 
 struct Viewport {
@@ -589,6 +591,7 @@ struct State {
     GLuint frame_time_query = 0;
     GlState current_gl;
     Viewport backbuffer_viewport = {};
+    mugfx_color_space backbuffer_color_space;
 };
 
 State* state = nullptr;
@@ -734,6 +737,14 @@ static void set_stencil(bool enabled, GLenum func, uint32_t ref, uint32_t mask)
     }
 }
 
+static void set_framebuffer_srgb(bool enabled)
+{
+    if (state->current_gl.framebufer_srgb_enabled != enabled) {
+        set_enabled(GL_FRAMEBUFFER_SRGB, enabled);
+        state->current_gl.framebufer_srgb_enabled = enabled;
+    }
+}
+
 static bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
 {
     // TODO: Save this per target!
@@ -857,6 +868,7 @@ EXPORT void mugfx_init(mugfx_init_params params)
     state->uniform_data.init((size_t)params.max_num_uniforms);
     state->geometries.init((size_t)params.max_num_geometries);
     state->render_targets.init((size_t)params.max_num_render_targets);
+    state->backbuffer_color_space = params.backbuffer_color_space;
 
     glGenQueries(1, &state->frame_time_query);
 }
@@ -2290,6 +2302,16 @@ EXPORT void mugfx_render_target_destroy(mugfx_render_target_id target)
     state->render_targets.remove(target.id);
 }
 
+static bool is_srgb(std::span<const RenderTargetAttachment> attachments)
+{
+    for (const auto& a : attachments) {
+        if (a.format == MUGFX_PIXEL_FORMAT_SRGB8 || a.format == MUGFX_PIXEL_FORMAT_SRGB8_ALPHA8) {
+            return true;
+        }
+    }
+    return false;
+}
+
 EXPORT void mugfx_set_viewport(int32_t x, int32_t y, uint32_t width, uint32_t height)
 {
     const auto current_fbo = state->current_gl.fbos.at((size_t)FboTarget::Draw);
@@ -2352,9 +2374,15 @@ EXPORT void mugfx_begin_pass(mugfx_render_target_id target)
             return;
         }
         bind_fbo(FboTarget::Draw, rt->fbo);
+        // In theory it should be enough to enable GL_FRAMEBUFFER_SRGB once at startup,
+        // as it should have no effect if no SRGB frame buffer is involved, but just googling
+        // this flag yields multiple results of people having bad surprises and implementations
+        // doing weird things, so I just set it, when I need it.
+        set_framebuffer_srgb(is_srgb(rt->color));
         glViewport(0, 0, (GLsizei)rt->width, (GLsizei)rt->height);
     } else {
         bind_fbo(FboTarget::Draw, 0);
+        set_framebuffer_srgb(state->backbuffer_color_space == MUGFX_COLOR_SPACE_SRGB);
         glViewport((GLint)state->backbuffer_viewport.x, (GLint)state->backbuffer_viewport.y,
             (GLsizei)state->backbuffer_viewport.w, (GLsizei)state->backbuffer_viewport.h);
     }

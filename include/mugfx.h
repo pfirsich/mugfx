@@ -43,6 +43,12 @@ typedef struct {
     void* ctx;
 } mugfx_allocator;
 
+typedef enum {
+    MUGFX_COLOR_SPACE_DEFAULT = 0, // SRGB
+    MUGFX_COLOR_SPACE_LINEAR,
+    MUGFX_COLOR_SPACE_SRGB,
+} mugfx_color_space;
+
 typedef struct {
     mugfx_logging_callback logging_callback;
     mugfx_panic_handler panic_handler; // if set, mugfx will panic on error
@@ -64,6 +70,7 @@ typedef struct {
     const void* swapchain; // VkSwapchainKHR
 #endif
     bool debug; // do error checking and panic if something is wrong
+    mugfx_color_space backbuffer_color_space;
 } mugfx_init_params;
 
 void mugfx_init(mugfx_init_params params);
@@ -468,7 +475,8 @@ void mugfx_render_target_destroy(mugfx_render_target_id target);
 
 // Dynamic Pipeline State
 void mugfx_set_viewport(int32_t x, int32_t y, uint32_t width, uint32_t height);
-void mugfx_set_scissor(int32_t x, int32_t y, uint32_t width, uint32_t height); // no way to unset yet!
+void mugfx_set_scissor(
+    int32_t x, int32_t y, uint32_t width, uint32_t height); // no way to unset yet!
 
 // Debug
 void mugfx_debug_push(const char* label);
