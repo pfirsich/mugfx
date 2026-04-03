@@ -44,7 +44,7 @@ typedef struct {
 } mugfx_allocator;
 
 typedef enum {
-    MUGFX_COLOR_SPACE_DEFAULT = 0, // SRGB
+    MUGFX_COLOR_SPACE_DEFAULT = 0, // LINEAR
     MUGFX_COLOR_SPACE_LINEAR,
     MUGFX_COLOR_SPACE_SRGB,
 } mugfx_color_space;
@@ -70,6 +70,9 @@ typedef struct {
     const void* swapchain; // VkSwapchainKHR
 #endif
     bool debug; // do error checking and panic if something is wrong
+    // don't use sRGB backbuffer on WebGL, since the linear->sRGB conversion
+    // probably does not happen reliably. Instead do a manual present-pass with
+    // a shader that applies the gamma curve.
     mugfx_color_space backbuffer_color_space;
 } mugfx_init_params;
 

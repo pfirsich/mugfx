@@ -877,6 +877,13 @@ EXPORT void mugfx_init(mugfx_init_params params)
     state->backbuffer_color_space = params.backbuffer_color_space;
 
     glGenQueries(1, &state->frame_time_query);
+
+#ifdef MUGFX_WEBGL
+    if (params.backbuffer_color_space == MUGFX_COLOR_SPACE_SRGB) {
+        log_error("sRGB back buffer will not work on WebGL");
+        return;
+    }
+#endif
 }
 
 template <typename T, typename DestroyFunc>
