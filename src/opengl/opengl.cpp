@@ -739,10 +739,16 @@ static void set_stencil(bool enabled, GLenum func, uint32_t ref, uint32_t mask)
 
 static void set_framebuffer_srgb(bool enabled)
 {
+#ifdef MUGFX_WEBGL
+    // While texture and framebuffer sRGB formats exist in WebGL2, GL_FRAMEBUFFER_SRGB does not, so
+    // we don't touch it.
+    (void)enabled;
+#else
     if (state->current_gl.framebufer_srgb_enabled != enabled) {
         set_enabled(GL_FRAMEBUFFER_SRGB, enabled);
         state->current_gl.framebufer_srgb_enabled = enabled;
     }
+#endif
 }
 
 static bool bind_texture(uint32_t unit, GLenum target, GLuint texture)
