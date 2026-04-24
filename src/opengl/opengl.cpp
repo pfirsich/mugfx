@@ -549,6 +549,11 @@ struct Pass {
     bool in_pass = false;
 };
 
+struct IndexedBufferBinding {
+    GLuint buffer = 0;
+    mugfx_range range = {};
+};
+
 struct GlState {
     std::array<GLuint, 64> texture_2d = {};
     GLuint program = 0;
@@ -570,6 +575,9 @@ struct GlState {
     GLint unpack_alignment = 4;
     GLuint vao;
     bool framebufer_srgb_enabled = false;
+    // 64 is a bit random. it should be dynamically sized by GL_MAX_UNIFORM_BUFFER_BINDINGS
+    // but I want to keep it simple. GL_MAX_UNIFORM_BUFFER_BINDINGS must be >= 24.
+    std::array<IndexedBufferBinding, 64> uniform_buffer_bindings = {};
 };
 
 struct Viewport {
@@ -819,24 +827,36 @@ static bool bind_buffer(GLenum target, GLuint buffer)
 {
     auto& current_buffer = state->current_gl.buffers.at(get_buffer_target_index(target));
     if (buffer != current_buffer) {
-        bind_buffer_nocache(target, buffer);
+        if (!bind_buffer_nocache(target, buffer)) {
+            return false;
+        }
         current_buffer = buffer;
     }
     return true;
 }
 
-static bool bind_buffer(GLenum target, GLuint buffer, uint32_t binding, mugfx_range range)
+static bool bind_uniform_buffer(GLuint buffer, uint32_t binding, mugfx_range range)
 {
+    auto& current_buffer = state->current_gl.buffers.at(get_buffer_target_index(GL_UNIFORM_BUFFER));
+    auto& current_binding = state->current_gl.uniform_buffer_bindings.at(binding);
+    if (buffer == current_buffer && current_binding.buffer == buffer
+        && current_binding.range.offset == range.offset
+        && current_binding.range.length == range.length) {
+        return true;
+    }
     state->cur_stats.buffer_binds++;
     if (range.length) {
-        glBindBufferBase(target, binding, buffer);
+        glBindBufferRange(GL_UNIFORM_BUFFER, binding, buffer, range.offset, range.length);
     } else {
-        glBindBufferRange(target, binding, buffer, range.offset, range.length);
+        glBindBufferBase(GL_UNIFORM_BUFFER, binding, buffer);
     }
     if (const auto error = glGetError()) {
         log_error("Error in glBindBufferBase/Range: %s", gl_error_string(error));
         return false;
     }
+    current_buffer = buffer;
+    current_binding.buffer = buffer;
+    current_binding.range = range;
     return true;
 }
 
@@ -2465,8 +2485,9 @@ static bool apply_bindings(mugfx_draw_binding* bindings, size_t num_bindings)
                 }
             }
 
-            if (!bind_buffer(buffer->target, buffer->buffer, bindings[i].uniform_data.binding,
-                    udata->buffer_range)) {
+            assert(buffer->target == GL_UNIFORM_BUFFER);
+            if (!bind_uniform_buffer(
+                    buffer->buffer, bindings[i].uniform_data.binding, udata->buffer_range)) {
                 return false;
             }
         } else if (bindings[i].type == MUGFX_BINDING_TYPE_TEXTURE) {
@@ -2484,8 +2505,9 @@ static bool apply_bindings(mugfx_draw_binding* bindings, size_t num_bindings)
                 log_error("Buffer ID %#10x does not exist", bindings[i].buffer.id.id);
                 return false;
             }
-            if (!bind_buffer(buffer->target, buffer->buffer, bindings[i].uniform_data.binding,
-                    bindings[i].buffer.range)) {
+            assert(buffer->target == GL_UNIFORM_BUFFER);
+            if (!bind_uniform_buffer(
+                    buffer->buffer, bindings[i].buffer.binding, bindings[i].buffer.range)) {
                 return false;
             }
         }
