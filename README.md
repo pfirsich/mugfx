@@ -96,10 +96,6 @@ Just `add_subdirectory` this project with CMake and link against the `mugfx` tar
 
 ## To Do
 
-* Uniform Optimizations:
-  - `CONSTANT`: OpenGL: Single shared, large uniform buffer bound once, Vulkan: Specialization Constants
-  - `FRAME`: Pool multiple together and triple buffer them (one being written by CPU, one waiting for GPU, one being read by GPU)
-  - `DRAW`: OpenGL: glUniform, Vulkan: Push Constants
 * Figure out how to export symbols on Windows properly
 * Disable checks when debug is not set
 * Consider OpenGL 3.3 support (only thing missing is binding layout qualifier) - add optional `name` to `mugfx_shader_binding` to map uniform blocks/samplers to bindings.
