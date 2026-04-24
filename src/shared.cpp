@@ -149,7 +149,6 @@ void default_init(mugfx_init_params& params)
 {
     set_default(params.max_num_shaders, 64);
     set_default(params.max_num_textures, 128);
-    set_default(params.max_num_uniforms, 1024);
     set_default(params.max_num_buffers, 1024);
     set_default(params.max_num_materials, 512);
     set_default(params.max_num_geometries, 1024);
@@ -189,11 +188,6 @@ void default_init(mugfx_buffer_create_params& params)
 {
     set_default(params.target, MUGFX_BUFFER_TARGET_ARRAY);
     set_default(params.usage, MUGFX_BUFFER_USAGE_HINT_STATIC);
-}
-
-void default_init(mugfx_uniform_data_create_params& params)
-{
-    set_default(params.usage_hint, MUGFX_UNIFORM_DATA_USAGE_HINT_FRAME);
 }
 
 void default_init(mugfx_geometry_create_params& params)

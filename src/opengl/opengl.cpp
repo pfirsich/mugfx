@@ -510,15 +510,6 @@ struct Buffer {
     GLenum usage;
 };
 
-struct UniformData {
-    mugfx_uniform_data_usage_hint usage;
-    mugfx_buffer_id buffer = {};
-    mugfx_range buffer_range = {};
-    void* cpu_buffer = nullptr;
-    bool cpu_buffer_owned = false;
-    bool dirty = false;
-};
-
 struct Geometry {
     GLenum draw_mode;
     GLuint vao;
@@ -590,7 +581,6 @@ struct State {
     Pool<Texture> textures;
     Pool<Material> materials;
     Pool<Buffer> buffers;
-    Pool<UniformData> uniform_data;
     Pool<Geometry> geometries;
     Pool<RenderTarget> render_targets;
     Pass current_pass;
@@ -922,7 +912,6 @@ EXPORT void mugfx_init(mugfx_init_params params)
     state->textures.init((size_t)params.max_num_textures);
     state->materials.init((size_t)params.max_num_materials);
     state->buffers.init((size_t)params.max_num_buffers);
-    state->uniform_data.init((size_t)params.max_num_uniforms);
     state->geometries.init((size_t)params.max_num_geometries);
     state->render_targets.init((size_t)params.max_num_render_targets);
     state->backbuffer_color_space = params.backbuffer_color_space;
@@ -956,7 +945,6 @@ EXPORT void mugfx_shutdown()
     destroy_all(state->textures, mugfx_texture_destroy);
     destroy_all(state->materials, mugfx_material_destroy);
     destroy_all(state->buffers, mugfx_buffer_destroy);
-    destroy_all(state->uniform_data, mugfx_uniform_data_destroy);
     destroy_all(state->geometries, mugfx_geometry_destroy);
     destroy_all(state->render_targets, mugfx_render_target_destroy);
 #ifndef MUGFX_WEBGL
@@ -1708,116 +1696,6 @@ EXPORT void mugfx_buffer_destroy(mugfx_buffer_id buffer)
     state->buffers.remove(buffer.id);
 }
 
-static mugfx_buffer_usage_hint get_buffer_usage(mugfx_uniform_data_usage_hint usage)
-{
-    switch (usage) {
-    case MUGFX_UNIFORM_DATA_USAGE_HINT_CONSTANT:
-        return MUGFX_BUFFER_USAGE_HINT_STATIC;
-    case MUGFX_UNIFORM_DATA_USAGE_HINT_FRAME:
-        return MUGFX_BUFFER_USAGE_HINT_DYNAMIC;
-    case MUGFX_UNIFORM_DATA_USAGE_HINT_DRAW:
-        return MUGFX_BUFFER_USAGE_HINT_STREAM;
-    default:
-        return MUGFX_BUFFER_USAGE_HINT_DEFAULT;
-    }
-}
-
-EXPORT mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create_params params)
-{
-    default_init(params);
-
-    if (!params.size) {
-        log_error("Uniform data size must be greater zero");
-        return { 0 };
-    }
-
-    // TODO: Be much smarter about this
-    const auto buffer_id = mugfx_buffer_create({
-        .target = MUGFX_BUFFER_TARGET_UNIFORM,
-        .usage = get_buffer_usage(params.usage_hint),
-        .data = { .data = params.cpu_buffer, .length = params.size },
-        .debug_label = params.debug_label,
-    });
-    const mugfx_range buffer_range = { .offset = 0, .length = params.size };
-
-    auto buffer = state->buffers.get(buffer_id.id);
-    if (!buffer) {
-        log_error("Buffer ID %#10x does not exist", buffer_id.id);
-        return { 0 };
-    }
-
-    void* cpu_buffer = params.cpu_buffer;
-    if (!cpu_buffer) {
-        cpu_buffer = allocate_raw(params.size);
-        std::memset(cpu_buffer, 0, params.size);
-    }
-
-    UniformData ub {
-        .usage = params.usage_hint,
-        .buffer = buffer_id,
-        .buffer_range = buffer_range,
-        .cpu_buffer = cpu_buffer,
-        // If no buffer was given, mugfx owns the buffer
-        .cpu_buffer_owned = !params.cpu_buffer,
-    };
-
-    const auto key = state->uniform_data.insert(std::move(ub));
-    return { key };
-}
-
-EXPORT void* mugfx_uniform_data_get_ptr(mugfx_uniform_data_id uniform_data_id)
-{
-    const auto udata = state->uniform_data.get(uniform_data_id.id);
-    if (!udata) {
-        log_error("Uniform data ID %#10x does not exist", uniform_data_id.id);
-        return nullptr;
-    }
-    udata->dirty = true;
-    return udata->cpu_buffer;
-}
-
-EXPORT void mugfx_uniform_data_update(mugfx_uniform_data_id uniform_data_id)
-{
-    const auto udata = state->uniform_data.get(uniform_data_id.id);
-    if (!udata) {
-        log_error("Uniform data ID %#10x does not exist", uniform_data_id.id);
-        return;
-    }
-    udata->dirty = true;
-}
-
-EXPORT void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data_id)
-{
-    const auto udata = state->uniform_data.get(uniform_data_id.id);
-    if (!udata) {
-        log_error("Uniform data ID %#10x does not exist", uniform_data_id.id);
-        return;
-    }
-    if (udata->cpu_buffer_owned) {
-        deallocate_raw(udata->cpu_buffer, udata->buffer_range.length);
-    }
-    state->uniform_data.remove(uniform_data_id.id);
-}
-
-static bool update_uniform_data(UniformData* udata, Buffer* buffer)
-{
-    // TODO: Make this faster
-    if (!bind_buffer(GL_UNIFORM_BUFFER, buffer->buffer)) {
-        return false;
-    }
-
-    state->cur_stats.buffer_uploads++;
-    state->cur_stats.buffer_upload_bytes += udata->buffer_range.length;
-
-    glBufferSubData(GL_UNIFORM_BUFFER, udata->buffer_range.offset, udata->buffer_range.length,
-        udata->cpu_buffer);
-    if (const auto error = glGetError()) {
-        log_error("Error in glBufferSubData: %s", gl_error_string(error));
-        return false;
-    }
-    return true;
-}
-
 static bool is_integer_attribute_type(GLenum t)
 {
     return t == GL_BYTE || t == GL_UNSIGNED_BYTE || t == GL_SHORT || t == GL_UNSIGNED_SHORT
@@ -2526,32 +2404,7 @@ static bool apply_material(Material* mat)
 static bool apply_bindings(mugfx_draw_binding* bindings, size_t num_bindings)
 {
     for (size_t i = 0; i < num_bindings; ++i) {
-        if (bindings[i].type == MUGFX_BINDING_TYPE_UNIFORM_DATA) {
-            const auto udata = state->uniform_data.get(bindings[i].uniform_data.id.id);
-            if (!udata) {
-                log_error("Uniform data ID %#10x does not exist", bindings[i].uniform_data.id.id);
-                return false;
-            }
-
-            const auto buffer = state->buffers.get(udata->buffer.id);
-            assert(buffer);
-            if (!buffer) {
-                log_error("Buffer ID %#10x does not exist", udata->buffer.id);
-                return false;
-            }
-
-            if (udata->dirty) {
-                if (!update_uniform_data(udata, buffer)) {
-                    return false;
-                }
-            }
-
-            assert(buffer->target == GL_UNIFORM_BUFFER);
-            if (!bind_uniform_buffer(
-                    buffer->buffer, bindings[i].uniform_data.binding, udata->buffer_range)) {
-                return false;
-            }
-        } else if (bindings[i].type == MUGFX_BINDING_TYPE_TEXTURE) {
+        if (bindings[i].type == MUGFX_BINDING_TYPE_TEXTURE) {
             const auto tex = state->textures.get(bindings[i].texture.id.id);
             if (!tex) {
                 log_error("Texture ID %#10x does not exist", bindings[i].texture.id.id);

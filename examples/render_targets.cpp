@@ -79,7 +79,8 @@ struct App {
     mugfx_material_id checker_mat;
     mugfx_geometry_id fs_quad;
     mugfx_render_target_id offscreen;
-    mugfx_uniform_data_id uframe;
+    UFrame uframe_data;
+    mugfx_buffer_id uframe_buf;
 
     void init()
     {
@@ -127,15 +128,15 @@ struct App {
             .debug_label = "fs_quad",
         });
 
-        uframe = mugfx_uniform_data_create({
-            .usage_hint = MUGFX_UNIFORM_DATA_USAGE_HINT_FRAME,
-            .size = sizeof(UFrame),
+        uframe_buf = mugfx_buffer_create({
+            .target = MUGFX_BUFFER_TARGET_UNIFORM,
+            .data = { 0, sizeof(UFrame) },
             .debug_label = "uframe",
         });
 
         offscreen = mugfx_render_target_create({
-            .width = win_w,
-            .height = win_h,
+            .width = (uint32_t)win_w,
+            .height = (uint32_t)win_h,
             .color = {
                 { MUGFX_PIXEL_FORMAT_RGBA8, true },
             },
@@ -147,7 +148,7 @@ struct App {
     void shutdown()
     {
         mugfx_render_target_destroy(offscreen);
-        mugfx_uniform_data_destroy(uframe);
+        mugfx_buffer_destroy(uframe_buf);
         mugfx_geometry_destroy(fs_quad);
         mugfx_material_destroy(post_mat);
         mugfx_shader_destroy(post_fs);
@@ -160,17 +161,16 @@ struct App {
 
     void main_loop()
     {
-        auto* uframe_data = (UFrame*)mugfx_uniform_data_get_ptr(uframe);
-        uframe_data->time = window.get_time();
-        mugfx_uniform_data_update(uframe);
+        uframe_data.time = window.get_time();
+        mugfx_buffer_update(uframe_buf, 0, { &uframe_data, sizeof(UFrame) });
 
         mugfx_begin_frame();
 
         // Pass 1: offscreen checker pattern
         std::array<mugfx_draw_binding, 1> pass1_bindings {
             mugfx_draw_binding {
-                .type = MUGFX_BINDING_TYPE_UNIFORM_DATA,
-                .uniform_data = { .binding = 0, .id = uframe },
+                .type = MUGFX_BINDING_TYPE_BUFFER,
+                .buffer = { .binding = 0, .id = uframe_buf },
             },
         };
 

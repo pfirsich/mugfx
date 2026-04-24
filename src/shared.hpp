@@ -56,7 +56,6 @@ void default_init(mugfx_shader_create_params& params);
 void default_init(mugfx_texture_create_params& params);
 void default_init(mugfx_material_create_params& params);
 void default_init(mugfx_buffer_create_params& params);
-void default_init(mugfx_uniform_data_create_params& params);
 void default_init(mugfx_geometry_create_params& params);
 
 template <typename T>

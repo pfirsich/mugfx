@@ -123,15 +123,19 @@ int main()
         .index_type = MUGFX_INDEX_TYPE_U16,
     });
 
-    const auto vs_uniform_data = mugfx_uniform_data_create({ .size = sizeof(UConstant) });
-    auto ubuf = (UConstant*)mugfx_uniform_data_get_ptr(vs_uniform_data);
-    ubuf->projection = { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f };
+    UConstant uconstant = {
+        .projection = { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f },
+    };
+    const auto vs_uniform_data = mugfx_buffer_create({
+        .target = MUGFX_BUFFER_TARGET_ARRAY,
+        .data = { &uconstant, sizeof(UConstant) },
+    });
 
     std::array<mugfx_draw_binding, 2> bindings {
         mugfx_draw_binding {
-            .type = MUGFX_BINDING_TYPE_UNIFORM_DATA,
-            .uniform_data = { .binding = 0, .id = vs_uniform_data },
+            .type = MUGFX_BINDING_TYPE_BUFFER,
+            .buffer = { .binding = 0, .id = vs_uniform_data },
         },
         mugfx_draw_binding {
             .type = MUGFX_BINDING_TYPE_TEXTURE,

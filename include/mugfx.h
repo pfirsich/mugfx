@@ -55,7 +55,6 @@ typedef struct {
     mugfx_allocator* allocator; // default will use malloc
     uint32_t max_num_shaders; // default: 64
     uint32_t max_num_textures; // default: 128
-    uint32_t max_num_uniforms; // default: 1024
     uint32_t max_num_buffers; // default: 1024
     uint32_t max_num_materials; // default: 512
     uint32_t max_num_geometries; // default: 1024
@@ -335,40 +334,6 @@ mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params);
 void mugfx_buffer_update(mugfx_buffer_id buf, size_t offset, mugfx_slice data);
 void mugfx_buffer_destroy(mugfx_buffer_id buf);
 
-// Uniform Data
-typedef struct {
-    uint32_t id;
-} mugfx_uniform_data_id;
-
-// This gives a hint on how often this data is changed, i.e. never, per frame or per draw.
-// If you have uniform data objects for each object in your scene, the example data
-// listed for USAGE_HINT_DRAW is actually USAGE_HINT_FRAME.
-typedef enum {
-    MUGFX_UNIFORM_DATA_USAGE_HINT_DEFAULT = 0,
-    MUGFX_UNIFORM_DATA_USAGE_HINT_CONSTANT, // e.g. screen dimensions, camera projection, ...
-    MUGFX_UNIFORM_DATA_USAGE_HINT_FRAME, // e.g. view matrix, time, lights, ...
-    MUGFX_UNIFORM_DATA_USAGE_HINT_DRAW, // e.g. model matrix, skinning, some material params, ...
-} mugfx_uniform_data_usage_hint;
-
-typedef struct {
-    mugfx_uniform_data_usage_hint usage_hint; // default: FRAME
-    size_t size;
-    // cpu_buffer must live as long as the uniform buffer itself, if given.
-    // It's length must be >= size
-    void* cpu_buffer; // optional, will be allocated otherwise
-    const char* debug_label;
-} mugfx_uniform_data_create_params;
-
-// This is essentially a cpu buffer and a dirty flag, plus a reference to a pool of gpu uniform
-// buffers (or a slice of one).
-mugfx_uniform_data_id mugfx_uniform_data_create(mugfx_uniform_data_create_params params);
-// This function marks the uniform data as dirty, assuming this pointer is used to modify it
-// The data should be in std140 layout!
-void* mugfx_uniform_data_get_ptr(mugfx_uniform_data_id uniform_data);
-// If you passed cpu_buffer, this will mark the data dirty and schedule an update of the GPU buffer
-void mugfx_uniform_data_update(mugfx_uniform_data_id uniform_data);
-void mugfx_uniform_data_destroy(mugfx_uniform_data_id uniform_data);
-
 // Geometry
 typedef struct {
     uint32_t id;
@@ -533,15 +498,9 @@ const mugfx_resource_stats* mugfx_get_resource_stats(void);
 // Drawing
 typedef enum {
     MUGFX_BINDING_TYPE_DEFAULT = 0,
-    MUGFX_BINDING_TYPE_UNIFORM_DATA,
     MUGFX_BINDING_TYPE_TEXTURE,
     MUGFX_BINDING_TYPE_BUFFER,
 } mugfx_binding_type;
-
-typedef struct {
-    uint32_t binding;
-    mugfx_uniform_data_id id;
-} mugfx_uniform_data_binding;
 
 typedef struct {
     uint32_t binding;
@@ -557,7 +516,6 @@ typedef struct {
 typedef struct {
     mugfx_binding_type type;
     union {
-        mugfx_uniform_data_binding uniform_data;
         mugfx_buffer_binding buffer;
         mugfx_texture_binding texture;
     };
