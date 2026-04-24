@@ -1,8 +1,8 @@
 #include <array>
 #include <cassert>
-#include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 using namespace std::string_view_literals;
@@ -603,6 +603,37 @@ struct State {
 };
 
 State* state = nullptr;
+
+auto gl_getb(GLenum param)
+{
+    GLboolean v = {};
+    glGetBooleanv(param, &v);
+    return v;
+}
+
+auto gl_getf(GLenum param)
+{
+    GLfloat v = {};
+    glGetFloatv(param, &v);
+    return v;
+}
+
+auto gl_geti(GLenum param)
+{
+    GLint v = {};
+    glGetIntegerv(param, &v);
+    return v;
+}
+
+std::string get_label(GLenum ident, GLuint obj)
+{
+    char buf[256];
+    GLsizei len = 0;
+    if (GLAD_GL_KHR_debug) {
+        glGetObjectLabel(ident, obj, sizeof(buf), &len, buf);
+    }
+    return std::string(buf, (size_t)len);
+}
 
 static void set_enabled(GLenum cap, bool value)
 {
@@ -1600,6 +1631,32 @@ EXPORT mugfx_buffer_id mugfx_buffer_create(mugfx_buffer_create_params params)
     return { key };
 }
 
+static GLenum get_buffer_binding(GLenum target)
+{
+    switch (target) {
+    case GL_ARRAY_BUFFER:
+        return GL_ARRAY_BUFFER_BINDING;
+    case GL_ELEMENT_ARRAY_BUFFER:
+        return GL_ELEMENT_ARRAY_BUFFER_BINDING;
+    case GL_UNIFORM_BUFFER:
+        return GL_UNIFORM_BUFFER_BINDING;
+    default:
+        return 0;
+    }
+}
+
+static void check_bound(Buffer& buf)
+{
+    const auto bound = (GLuint)gl_geti(get_buffer_binding(buf.target));
+    if (buf.buffer != bound) {
+        const auto buffer_label = get_label(GL_BUFFER, buf.buffer);
+        const auto bound_label = get_label(GL_BUFFER, bound);
+        log_error("Buffer %d (%.*s) is bound when %d (%.*s) is expected", bound,
+            (int)bound_label.size(), bound_label.data(), buf.buffer, (int)buffer_label.size(),
+            buffer_label.data());
+    }
+}
+
 EXPORT void mugfx_buffer_update(mugfx_buffer_id buffer, size_t offset, mugfx_slice data)
 {
     const auto buf = state->buffers.get(buffer.id);
@@ -1612,10 +1669,13 @@ EXPORT void mugfx_buffer_update(mugfx_buffer_id buffer, size_t offset, mugfx_sli
         return;
     }
 
+    assert(offset + data.length <= buf->size);
+
     if (!data.data) {
         // Orphan buffer
         glBufferData(buf->target, buf->size, nullptr, buf->usage);
         if (const auto error = glGetError()) {
+            check_bound(*buf);
             log_error("Error in glBufferData: %s", gl_error_string(error));
         }
     } else {
@@ -1624,6 +1684,7 @@ EXPORT void mugfx_buffer_update(mugfx_buffer_id buffer, size_t offset, mugfx_sli
 
         glBufferSubData(buf->target, offset, data.length, data.data);
         if (const auto error = glGetError()) {
+            check_bound(*buf);
             log_error("Error in glBufferSubData: %s", gl_error_string(error));
         }
     }
