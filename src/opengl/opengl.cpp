@@ -531,6 +531,7 @@ struct RenderTargetAttachment {
 struct RenderTarget {
     GLuint fbo;
     uint32_t width, height;
+    uint8_t samples;
     std::array<RenderTargetAttachment, MUGFX_MAX_COLOR_FORMATS> color = {};
     RenderTargetAttachment depth = {};
 };
@@ -2048,6 +2049,7 @@ EXPORT mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_cre
         .fbo = fbo,
         .width = params.width,
         .height = params.height,
+        .samples = params.samples,
     };
 
     auto error_return = [&]() -> mugfx_render_target_id {
@@ -2193,6 +2195,7 @@ struct RtInfo {
     GLuint fbo;
     GLint width, height;
     GLenum bits;
+    GLenum read_buffer;
 };
 
 static RtInfo get_rt_info(mugfx_render_target_id rt_id)
@@ -2203,11 +2206,23 @@ static RtInfo get_rt_info(mugfx_render_target_id rt_id)
             log_error("Render target ID %#10x does not exist", rt_id.id);
             return {};
         }
-        return { rt->fbo, (GLint)rt->width, (GLint)rt->height, get_bits(*rt) };
+        return {
+            rt->fbo,
+            (GLint)rt->width,
+            (GLint)rt->height,
+            get_bits(*rt),
+            GL_COLOR_ATTACHMENT0,
+        };
     } else {
         GLint w = 0, h = 0;
         get_viewport_size(&w, &h);
-        return { 0, w, h, GL_COLOR_BUFFER_BIT }; // only color?
+        return {
+            0,
+            w,
+            h,
+            GL_COLOR_BUFFER_BIT, // only color?
+            GL_BACK,
+        };
     }
 }
 
@@ -2226,6 +2241,11 @@ EXPORT void mugfx_render_target_blit_to_render_target(
 
     bind_fbo(FboTarget::Read, src.fbo);
     bind_fbo(FboTarget::Draw, dst.fbo);
+
+    glReadBuffer(src.read_buffer);
+    if (const auto error = glGetError()) {
+        log_error("glReadBuffer failed: %s", gl_error_string(error));
+    }
 
     const auto bits = src.bits & dst.bits;
     const auto depth = bits & (GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -2256,7 +2276,7 @@ EXPORT void mugfx_render_target_destroy(mugfx_render_target_id target)
 {
     const auto rt = state->render_targets.get(target.id);
     if (!rt) {
-        log_error("Render target ID %#10x does notexist", target.id);
+        log_error("Render target ID %#10x does not exist", target.id);
         return;
     }
 
@@ -2272,6 +2292,90 @@ EXPORT void mugfx_render_target_destroy(mugfx_render_target_id target)
 
     state->res_stats.render_targets_alive--;
     state->render_targets.remove(target.id);
+}
+
+static GLenum get_read_format(mugfx_pixel_format fmt)
+{
+    switch (fmt) {
+    case MUGFX_PIXEL_FORMAT_RGBA8:
+        return GL_RGBA;
+    default:
+        return 0;
+    }
+}
+
+static GLenum get_read_type(mugfx_pixel_format fmt)
+{
+    switch (fmt) {
+    case MUGFX_PIXEL_FORMAT_RGBA8:
+        return GL_UNSIGNED_BYTE;
+    default:
+        return 0;
+    }
+}
+
+EXPORT void mugfx_render_target_read(
+    mugfx_render_target_id target, void* dst, mugfx_render_target_read_params params)
+{
+    params.dst_format = params.dst_format ? params.dst_format : MUGFX_PIXEL_FORMAT_RGBA8;
+
+    const auto format = get_read_format(params.dst_format);
+    if (!format) {
+        log_error("Invalid pixel format for mugfx_render_target_read");
+        return;
+    }
+    const auto type = get_read_type(params.dst_format);
+    if (!type) {
+        log_error("Invalid pixel format for mugfx_render_target_read");
+        return;
+    }
+
+    if (target.id) {
+        const auto rt = state->render_targets.get(target.id);
+        if (!rt) {
+            log_error("Render target ID %#10x does not exist", target.id);
+            return;
+        }
+
+        if (rt->samples > 1) {
+            log_error("Cannot read from multi-sampled render target. Resolve via blit first.");
+            return;
+        }
+
+        params.width = params.width ? params.width : rt->width;
+        params.height = params.height ? params.height : rt->height;
+
+        bind_fbo(FboTarget::Read, rt->fbo);
+
+        glReadBuffer(GL_COLOR_ATTACHMENT0 + params.color_index);
+        if (const auto error = glGetError()) {
+            log_error("glReadBuffer failed: %s", gl_error_string(error));
+        }
+    } else {
+        if (params.color_index) {
+            log_error("Invalid color index for reading back buffer");
+            return;
+        }
+
+        params.width = params.width ? params.width : state->backbuffer_viewport.w;
+        params.height = params.height ? params.height : state->backbuffer_viewport.h;
+
+        bind_fbo(FboTarget::Read, 0);
+
+        glReadBuffer(GL_BACK);
+        if (const auto error = glGetError()) {
+            log_error("glReadBuffer failed: %s", gl_error_string(error));
+        }
+    }
+
+    glReadPixels(params.x, params.y, params.width, params.height, format, type, dst);
+    if (const auto error = glGetError()) {
+        log_error("glReadPixels failed: %s", gl_error_string(error));
+    }
+
+    if (target.id) {
+        bind_fbo(FboTarget::Read, 0);
+    }
 }
 
 static bool is_srgb(std::span<const RenderTargetAttachment> attachments)

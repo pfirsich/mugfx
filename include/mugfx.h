@@ -441,6 +441,15 @@ void mugfx_render_target_blit_to_render_target(
     mugfx_render_target_id src_target, mugfx_render_target_id dst_target);
 void mugfx_render_target_destroy(mugfx_render_target_id target);
 
+typedef struct {
+    uint32_t color_index;
+    int32_t x, y;
+    uint32_t width, height; // default: render target width/height
+    mugfx_pixel_format dst_format; // default: RGBA8
+} mugfx_render_target_read_params;
+void mugfx_render_target_read(
+    mugfx_render_target_id target, void* dst, mugfx_render_target_read_params params);
+
 // Dynamic Pipeline State
 void mugfx_set_viewport(int32_t x, int32_t y, uint32_t width, uint32_t height);
 void mugfx_set_scissor(
