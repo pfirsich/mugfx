@@ -185,6 +185,18 @@ typedef enum {
     MUGFX_TEXTURE_MAG_FILTER_LINEAR,
 } mugfx_texture_mag_filter;
 
+typedef enum {
+    MUGFX_DEPTH_FUNC_DEFAULT = 0,
+    MUGFX_DEPTH_FUNC_NEVER,
+    MUGFX_DEPTH_FUNC_LESS,
+    MUGFX_DEPTH_FUNC_EQUAL,
+    MUGFX_DEPTH_FUNC_LEQUAL,
+    MUGFX_DEPTH_FUNC_GREATER,
+    MUGFX_DEPTH_FUNC_NOT_EQUAL,
+    MUGFX_DEPTH_FUNC_GEQUAL,
+    MUGFX_DEPTH_FUNC_ALWAYS,
+} mugfx_depth_func;
+
 typedef struct {
     uint32_t width;
     uint32_t height;
@@ -198,6 +210,7 @@ typedef struct {
     bool generate_mipmaps;
     mugfx_slice data; // maybe optionally be set at creation
     mugfx_pixel_format data_format; // default: format
+    mugfx_depth_func depth_compare; // default: compare off
     const char* debug_label;
 } mugfx_texture_create_params;
 
@@ -211,18 +224,6 @@ void mugfx_texture_destroy(mugfx_texture_id texture);
 typedef struct {
     uint32_t id;
 } mugfx_material_id;
-
-typedef enum {
-    MUGFX_DEPTH_FUNC_DEFAULT = 0,
-    MUGFX_DEPTH_FUNC_NEVER,
-    MUGFX_DEPTH_FUNC_LESS,
-    MUGFX_DEPTH_FUNC_EQUAL,
-    MUGFX_DEPTH_FUNC_LEQUAL,
-    MUGFX_DEPTH_FUNC_GREATER,
-    MUGFX_DEPTH_FUNC_NOT_EQUAL,
-    MUGFX_DEPTH_FUNC_GEQUAL,
-    MUGFX_DEPTH_FUNC_ALWAYS,
-} mugfx_depth_func;
 
 typedef enum {
     MUGFX_WRITE_MASK_DEFAULT = 0,
@@ -418,6 +419,7 @@ typedef struct {
 typedef struct {
     mugfx_pixel_format format;
     bool sampleable; // You can get the texture for the attachment iff it is sampleable
+    mugfx_depth_func depth_compare; // Only valid for sampleable depth attachment
 } mugfx_render_target_attachment;
 
 typedef struct {

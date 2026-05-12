@@ -942,12 +942,12 @@ EXPORT void mugfx_shutdown()
 {
     assert(state);
     glDeleteQueries(1, &state->frame_time_query);
+    destroy_all(state->render_targets, mugfx_render_target_destroy);
     destroy_all(state->shaders, mugfx_shader_destroy);
     destroy_all(state->textures, mugfx_texture_destroy);
     destroy_all(state->materials, mugfx_material_destroy);
     destroy_all(state->buffers, mugfx_buffer_destroy);
     destroy_all(state->geometries, mugfx_geometry_destroy);
-    destroy_all(state->render_targets, mugfx_render_target_destroy);
 #ifndef MUGFX_WEBGL
     gladLoaderUnloadGL();
 #endif
@@ -1297,6 +1297,28 @@ EXPORT mugfx_texture_id mugfx_texture_create(mugfx_texture_create_params params)
     if (const auto error = glGetError()) {
         log_error("Error setting mag filter: %s", gl_error_string(error));
         return error_return();
+    }
+
+    if (params.depth_compare) {
+        if (!is_depth_format(params.format)) {
+            log_error("Compare mode only valid for depth textures");
+            return error_return();
+        }
+        const auto depth_func = gl_depth_func(params.depth_compare);
+        if (!depth_func) {
+            log_error("Invalid compare mode: %d", params.depth_compare);
+            return error_return();
+        }
+        glTexParameteri(target, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        if (const auto error = glGetError()) {
+            log_error("Error setting compare mode: %s", gl_error_string(error));
+            return error_return();
+        }
+        glTexParameteri(target, GL_TEXTURE_COMPARE_FUNC, *depth_func);
+        if (const auto error = glGetError()) {
+            log_error("Error setting compare func: %s", gl_error_string(error));
+            return error_return();
+        }
     }
 
     // Set texture storage and upload data if available
@@ -1958,7 +1980,8 @@ static void destroy(RenderTargetAttachment& a)
 }
 
 static bool init_attachment(RenderTargetAttachment& rt_att, uint32_t width, uint32_t height,
-    uint8_t samples, mugfx_pixel_format format, bool sampleable, GLenum attachment)
+    uint8_t samples, mugfx_pixel_format format, bool sampleable, mugfx_depth_func depth_compare,
+    GLenum attachment)
 {
     const auto gl_format = gl_pixel_format(format);
     if (!gl_format) {
@@ -1981,6 +2004,7 @@ static bool init_attachment(RenderTargetAttachment& rt_att, uint32_t width, uint
             .generate_mipmaps = false,
             .data = { .data = nullptr, .length = 0 },
             .data_format = format,
+            .depth_compare = depth_compare,
         });
 
         if (!rt_att.texture.id) {
@@ -1996,6 +2020,11 @@ static bool init_attachment(RenderTargetAttachment& rt_att, uint32_t width, uint
             return false;
         }
     } else {
+        if (depth_compare) {
+            log_error("Compare mode is only valid for sampleable depth attachments");
+            return false;
+        }
+
         // Renderbuffer
         glGenRenderbuffers(1, &rt_att.rbo);
         glBindRenderbuffer(GL_RENDERBUFFER, rt_att.rbo);
@@ -2077,10 +2106,15 @@ EXPORT mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_cre
             return error_return();
         }
 
+        if (c.depth_compare) {
+            log_error("Color attachment %u must not have depth compare mode", (unsigned)i);
+            return error_return();
+        }
+
         const auto attachment = (GLenum)(GL_COLOR_ATTACHMENT0 + i);
 
-        if (!init_attachment(rt.color[i], params.width, params.height, params.samples,
-                params.color[i].format, params.color[i].sampleable, attachment)) {
+        if (!init_attachment(rt.color[i], params.width, params.height, params.samples, c.format,
+                c.sampleable, (mugfx_depth_func)0, attachment)) {
             log_error("Failed to create render target color attachment %zu", i);
             return error_return();
         }
@@ -2100,7 +2134,8 @@ EXPORT mugfx_render_target_id mugfx_render_target_create(mugfx_render_target_cre
             : GL_DEPTH_ATTACHMENT;
 
         if (!init_attachment(rt.depth, params.width, params.height, params.samples,
-                params.depth.format, params.depth.sampleable, attachment)) {
+                params.depth.format, params.depth.sampleable, params.depth.depth_compare,
+                attachment)) {
             log_error("Failed to create render target depth attachment");
             return error_return();
         }
