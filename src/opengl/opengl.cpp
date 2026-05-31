@@ -516,10 +516,8 @@ struct Geometry {
     GLenum index_type;
     GLsizei vertex_offset;
     GLsizei vertex_count;
-    GLsizei max_vertex_count;
     GLsizei index_offset;
     GLsizei index_count;
-    GLsizei max_index_count;
 };
 
 struct RenderTargetAttachment {
@@ -1741,10 +1739,8 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         .index_type = 0,
         .vertex_offset = 0,
         .vertex_count = static_cast<GLsizei>(params.vertex_count),
-        .max_vertex_count = static_cast<GLsizei>(params.vertex_count),
         .index_offset = 0,
         .index_count = static_cast<GLsizei>(params.index_count),
-        .max_index_count = static_cast<GLsizei>(params.vertex_count),
     };
 
     struct Attribute {
@@ -1808,23 +1804,6 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
             offset = attr.offset + get_attribute_size(in_attr.type, in_attr.components);
         }
         vfmt[b].stride = buf.stride ? buf.stride : offset;
-
-        // TODO: Check divisability
-        const auto vertex_count = static_cast<GLsizei>(vbufs[b]->size / vfmt[b].stride);
-        if (!geom.max_vertex_count) {
-            geom.max_vertex_count = vertex_count;
-        } else {
-            geom.max_vertex_count = std::min(geom.max_vertex_count, vertex_count);
-        }
-        if (geom.vertex_count > vertex_count) {
-            log_error("Geometry vertex_count (%u) exceeds max vertex count of buffers (%u)",
-                geom.vertex_count, vertex_count);
-            return { 0 };
-        }
-    }
-
-    if (!geom.vertex_count) {
-        geom.vertex_count = geom.max_vertex_count;
     }
 
     const Buffer* ibuf = nullptr;
@@ -1839,22 +1818,6 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         ibuf = state->buffers.get(params.index_buffer.id);
         if (!ibuf) {
             log_error("Index buffer ID %#10x does not exist", params.index_buffer.id);
-            return { 0 };
-        }
-
-        const auto index_size = get_index_size(geom.index_type);
-        assert(index_size);
-
-        const auto index_count = static_cast<GLsizei>(ibuf->size / *index_size);
-        if (!geom.max_index_count) {
-            geom.max_index_count = index_count;
-        }
-        if (!geom.index_count) {
-            geom.index_count = index_count;
-        }
-        if (geom.index_count > index_count) {
-            log_error("Geometry index_count (%u) exceeds max index count of index buffer (%u)",
-                geom.index_count, index_count);
             return { 0 };
         }
     }

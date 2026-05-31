@@ -397,11 +397,11 @@ typedef enum {
 typedef struct {
     mugfx_draw_mode draw_mode; // default: TRIANGLES
     mugfx_vertex_buffer vertex_buffers[MUGFX_MAX_VERTEX_BUFFERS];
+    uint32_t vertex_count; // mandatory if index buffer not present
     mugfx_buffer_id index_buffer; // optional
     mugfx_index_type index_type; // mandatory if index_buffer is given
     size_t index_buffer_offset;
-    uint32_t vertex_count;
-    uint32_t index_count;
+    uint32_t index_count; // mandatory if index buffer present
     const char* debug_label;
 } mugfx_geometry_create_params;
 
