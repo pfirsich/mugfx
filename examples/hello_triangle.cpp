@@ -121,6 +121,7 @@ int main()
         },
         .index_buffer = index_buffer,
         .index_type = MUGFX_INDEX_TYPE_U16,
+        .index_count = indices.size(),
     });
 
     UConstant uconstant = {
