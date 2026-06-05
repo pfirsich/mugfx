@@ -1733,6 +1733,9 @@ EXPORT mugfx_geometry_id mugfx_geometry_create(mugfx_geometry_create_params para
         return { 0 };
     }
 
+    assert(params.index_buffer.id || params.vertex_count);
+    assert(!params.index_buffer.id || params.index_count);
+
     Geometry geom {
         .draw_mode = *draw_mode,
         .vao = 0,
